@@ -1,0 +1,29 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Only your two accounts can touch any data.
+    // Replace these with the two email addresses you create in
+    // Firebase Authentication (must match exactly, lowercase).
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email in [
+          'owner1@example.com',
+          'owner2@example.com'
+        ];
+    }
+
+    match /businesses/{businessId} {
+      allow read, write: if isOwner();
+    }
+
+    match /customers/{customerId} {
+      allow read, write: if isOwner();
+    }
+
+    match /invoices/{invoiceId} {
+      allow read, write: if isOwner();
+    }
+  }
+}
