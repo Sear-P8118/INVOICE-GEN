@@ -12,7 +12,7 @@ import {
   runTransaction,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Business, Customer, Invoice, LineItem } from '@/types';
+import { Business, Customer, Invoice, LineItem, normalizeStatus } from '@/types';
 import { GST_RATE, getBusinessConfig } from './constants';
 
 // ---------- Business settings ----------
@@ -34,6 +34,7 @@ export function defaultBusiness(businessId: string): Business {
     invoicePrefix: config?.invoicePrefix || 'INV',
     nextInvoiceNumber: 1001,
     paymentTermsDays: 14,
+    ...config?.defaults,
   };
 }
 
@@ -81,14 +82,18 @@ export async function deleteCustomer(id: string): Promise<void> {
 export async function getInvoices(businessId: string): Promise<Invoice[]> {
   const q = query(collection(db(), 'invoices'), where('businessId', '==', businessId));
   const snap = await getDocs(q);
-  const invoices = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Invoice));
+  const invoices = snap.docs.map((d) => {
+    const inv = { ...d.data(), id: d.id } as Invoice;
+    return { ...inv, status: normalizeStatus(inv.status) };
+  });
   return invoices.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function getInvoice(id: string): Promise<Invoice | null> {
   const snap = await getDoc(doc(db(), 'invoices', id));
   if (!snap.exists()) return null;
-  return { ...snap.data(), id: snap.id } as Invoice;
+  const inv = { ...snap.data(), id: snap.id } as Invoice;
+  return { ...inv, status: normalizeStatus(inv.status) };
 }
 
 export async function saveInvoice(

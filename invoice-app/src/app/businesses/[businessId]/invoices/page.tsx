@@ -8,7 +8,7 @@ import TopBar from '@/components/ui/TopBar';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { getInvoices } from '@/lib/firestore';
 import { formatCurrency } from '@/lib/constants';
-import { Invoice, InvoiceStatus, INVOICE_STATUSES } from '@/types';
+import { Invoice, InvoiceStatus, INVOICE_STATUSES, effectiveStatus } from '@/types';
 
 export default function InvoicesPage() {
   const { businessId } = useParams<{ businessId: string }>();
@@ -24,7 +24,7 @@ export default function InvoicesPage() {
     if (!invoices) return null;
     const q = search.trim().toLowerCase();
     return invoices.filter((inv) => {
-      if (statusFilter !== 'All' && inv.status !== statusFilter) return false;
+      if (statusFilter !== 'All' && effectiveStatus(inv) !== statusFilter) return false;
       if (!q) return true;
       return (
         inv.customerName.toLowerCase().includes(q) ||
@@ -96,7 +96,7 @@ export default function InvoicesPage() {
                 </p>
               </div>
               <p className="text-sm font-bold text-slate-900">{formatCurrency(inv.total)}</p>
-              <StatusBadge status={inv.status} />
+              <StatusBadge status={effectiveStatus(inv)} />
             </Link>
           ))}
         </div>

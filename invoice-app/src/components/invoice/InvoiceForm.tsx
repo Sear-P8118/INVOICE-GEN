@@ -244,7 +244,7 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
       {/* Status + notes */}
       <Select label="Status" value={status} onChange={(e) => setStatus(e.target.value as InvoiceStatus)}>
         <option>Draft</option>
-        <option>Sent</option>
+        <option>Pending</option>
         <option>Paid</option>
         <option>Overdue</option>
       </Select>

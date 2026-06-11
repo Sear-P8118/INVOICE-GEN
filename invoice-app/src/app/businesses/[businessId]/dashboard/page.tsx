@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Plus, ArrowLeftRight, FileWarning } from 'lucide-react';
 import { getInvoices } from '@/lib/firestore';
 import { getBusinessConfig, formatCurrency } from '@/lib/constants';
-import { Invoice } from '@/types';
+import { Invoice, effectiveStatus } from '@/types';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { isBefore, parseISO, startOfMonth, startOfDay } from 'date-fns';
+import { parseISO, startOfMonth } from 'date-fns';
 
 export default function DashboardPage() {
   const { businessId } = useParams<{ businessId: string }>();
@@ -22,13 +23,13 @@ export default function DashboardPage() {
 
   const stats = useMemo(() => {
     if (!invoices) return null;
-    const today = startOfDay(new Date());
     const monthStart = startOfMonth(new Date());
 
-    const unpaid = invoices.filter((i) => i.status === 'Sent' || i.status === 'Overdue');
-    const overdue = unpaid.filter(
-      (i) => i.status === 'Overdue' || isBefore(parseISO(i.dueDate), today)
-    );
+    const unpaid = invoices.filter((i) => {
+      const s = effectiveStatus(i);
+      return s === 'Pending' || s === 'Overdue';
+    });
+    const overdue = unpaid.filter((i) => effectiveStatus(i) === 'Overdue');
     const paidThisMonth = invoices
       .filter((i) => i.status === 'Paid' && parseISO(i.updatedAt) >= monthStart)
       .reduce((sum, i) => sum + i.total, 0);
@@ -39,15 +40,30 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <header className={`bg-gradient-to-br ${config.gradient} px-5 pb-6 pt-12 text-white`}>
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">{config.name}</h1>
-            <p className="mt-0.5 text-sm text-white/70">{config.tagline}</p>
+      <header className={`bg-gradient-to-br ${config.ui.gradient} px-5 pb-6 pt-12 text-white`}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              className="flex h-12 w-[4.5rem] shrink-0 items-center justify-center overflow-hidden rounded-xl"
+              style={{ backgroundColor: config.logo.bg }}
+            >
+              <Image
+                src={config.logo.src}
+                alt=""
+                width={config.logo.width}
+                height={config.logo.height}
+                className="h-10 w-auto object-contain"
+                priority
+              />
+            </span>
+            <div className="min-w-0">
+              <h1 className="truncate text-xl font-bold">{config.name}</h1>
+              <p className="truncate text-xs text-white/65">{config.tagline}</p>
+            </div>
           </div>
           <Link
             href="/home"
-            className="flex items-center gap-1.5 rounded-xl bg-white/15 px-3 py-2 text-xs font-semibold active:bg-white/25"
+            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white/15 px-3 py-2 text-xs font-semibold active:bg-white/25"
           >
             <ArrowLeftRight size={14} />
             Switch
@@ -76,7 +92,7 @@ export default function DashboardPage() {
       <div className="px-5 py-5">
         <button
           onClick={() => router.push(`/businesses/${businessId}/invoices/new`)}
-          className={`flex w-full items-center justify-center gap-2 rounded-2xl ${config.accent} py-4 text-base font-bold text-white shadow-md transition-transform active:scale-[0.98]`}
+          className={`flex w-full items-center justify-center gap-2 rounded-2xl ${config.ui.accent} py-4 text-base font-bold text-white shadow-md transition-transform active:scale-[0.98]`}
         >
           <Plus size={20} strokeWidth={2.5} />
           New Invoice
@@ -93,7 +109,7 @@ export default function DashboardPage() {
           <h2 className="text-base font-bold text-slate-900">Unpaid invoices</h2>
           <Link
             href={`/businesses/${businessId}/invoices`}
-            className="text-sm font-semibold text-slate-500"
+            className={`text-sm font-semibold ${config.ui.accentText}`}
           >
             View all
           </Link>
@@ -119,7 +135,7 @@ export default function DashboardPage() {
                 </p>
               </div>
               <p className="text-sm font-bold text-slate-900">{formatCurrency(inv.total)}</p>
-              <StatusBadge status={inv.status} />
+              <StatusBadge status={effectiveStatus(inv)} />
             </Link>
           ))}
         </div>

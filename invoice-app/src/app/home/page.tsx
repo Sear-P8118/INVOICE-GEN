@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { LogOut, ChevronRight } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
 import { BUSINESSES } from '@/lib/constants';
@@ -18,41 +19,59 @@ function HomeInner() {
   const { signOut } = useAuth();
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-2xl flex-col bg-slate-900 px-5 pb-safe">
-      <header className="flex items-center justify-between pb-2 pt-12">
+    <div className="mx-auto flex min-h-dvh max-w-2xl flex-col bg-slate-950 px-5 pb-safe">
+      <header className="flex items-center justify-between pb-2 pt-14">
         <div>
-          <h1 className="text-2xl font-bold text-white">My Businesses</h1>
-          <p className="mt-1 text-sm text-slate-400">Choose a business to send invoices</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+            Popal Holdings
+          </p>
+          <h1 className="mt-1 text-[26px] font-bold leading-tight text-white">
+            Select a business
+          </h1>
         </div>
         <button
           onClick={signOut}
-          className="rounded-xl p-2.5 text-slate-400 active:bg-slate-800"
+          className="rounded-xl p-2.5 text-slate-500 active:bg-slate-800"
           aria-label="Sign out"
         >
           <LogOut size={20} />
         </button>
       </header>
 
-      <div className="mt-6 flex flex-1 flex-col gap-4">
+      <div className="mt-8 flex flex-col gap-4">
         {BUSINESSES.map((biz) => (
           <Link
             key={biz.id}
             href={`/businesses/${biz.id}/dashboard`}
-            className={`flex items-center gap-4 rounded-2xl bg-gradient-to-br ${biz.gradient} p-5 shadow-lg transition-transform active:scale-[0.98]`}
+            className="group overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-xl shadow-black/30 transition-transform active:scale-[0.98]"
           >
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-3xl">
-              {biz.icon}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-lg font-bold text-white">{biz.name}</span>
-              <span className="block text-sm text-white/70">{biz.tagline}</span>
-            </span>
-            <ChevronRight className="shrink-0 text-white/60" size={22} />
+            <div
+              className="flex h-28 items-center justify-center px-6"
+              style={{ backgroundColor: biz.logo.bg }}
+            >
+              <Image
+                src={biz.logo.src}
+                alt={`${biz.name} logo`}
+                width={biz.logo.width}
+                height={biz.logo.height}
+                className="h-20 w-auto object-contain"
+                priority
+              />
+            </div>
+            <div className={`flex items-center gap-3 bg-gradient-to-r ${biz.ui.gradient} px-5 py-4`}>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-base font-bold text-white">{biz.name}</span>
+                <span className="block truncate text-xs text-white/65">{biz.tagline}</span>
+              </span>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15">
+                <ChevronRight className="text-white" size={18} />
+              </span>
+            </div>
           </Link>
         ))}
       </div>
 
-      <p className="py-6 text-center text-xs text-slate-600">
+      <p className="mt-auto py-6 text-center text-xs text-slate-700">
         Battery Invoices · Private app
       </p>
     </div>

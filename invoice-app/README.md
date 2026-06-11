@@ -8,7 +8,7 @@ A private, mobile-first invoicing app for three businesses in one place:
 
 Open the app → tap a business icon → create and send invoices for that business. Each business has its own customers, invoice numbering, settings, bank details and GST status.
 
-**Features:** create / edit / duplicate / delete invoices · customer database · auto invoice numbers · GST toggle (Tax Invoice vs Invoice) · clean PDF generation on-device · share or download PDFs from your phone · statuses (Draft / Sent / Paid / Overdue) · search by customer, date or invoice number · dashboard with unpaid total and paid-this-month · installable PWA with app icon · works offline (Firestore cache) · 100% free tier, no paid APIs.
+**Features:** create / edit / duplicate / delete invoices · customer database · auto invoice numbers · GST toggle (Tax Invoice vs Invoice) · clean PDF generation on-device · share or download PDFs from your phone · statuses (Draft / Pending / Paid / Overdue, with automatic overdue detection) · search by customer, date or invoice number · dashboard with unpaid total and paid-this-month · installable PWA with app icon · works offline (Firestore cache) · 100% free tier, no paid APIs.
 
 ---
 

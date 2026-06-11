@@ -1,11 +1,12 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Business, Invoice } from '@/types';
-import { formatCurrency } from './constants';
+import { RGB, formatCurrency, getBusinessConfig } from './constants';
 import { format, parseISO } from 'date-fns';
 
-const SLATE = [30, 41, 59] as const;
-const GRAY = [100, 116, 139] as const;
+const SLATE: RGB = [30, 41, 59];
+const GRAY: RGB = [100, 116, 139];
+const LIGHT: RGB = [241, 245, 249];
 
 function fmtDate(iso: string): string {
   try {
@@ -15,49 +16,145 @@ function fmtDate(iso: string): string {
   }
 }
 
-export function buildInvoicePDF(invoice: Invoice, business: Business): jsPDF {
+// ---------- Logo loading (cached data URLs so PDFs embed the brand logo) ----------
+
+const logoCache = new Map<string, string>();
+
+async function loadLogo(src: string): Promise<string | null> {
+  const cached = logoCache.get(src);
+  if (cached) return cached;
+  try {
+    const res = await fetch(src);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    logoCache.set(src, dataUrl);
+    return dataUrl;
+  } catch {
+    return null;
+  }
+}
+
+// ---------- Invoice PDF ----------
+
+export async function buildInvoicePDF(invoice: Invoice, business: Business): Promise<jsPDF> {
+  const config = getBusinessConfig(invoice.businessId);
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
   const margin = 16;
   const right = pageW - margin;
   const isTaxInvoice = invoice.gstRegistered;
+  const title = isTaxInvoice ? 'TAX INVOICE' : 'INVOICE';
 
-  // ---- Header band ----
-  doc.setFillColor(...SLATE);
-  doc.rect(0, 0, pageW, 38, 'F');
+  const pdf = config?.pdf;
+  const accent: RGB = pdf?.accent ?? SLATE;
+  const logo = config ? await loadLogo(config.logo.src) : null;
+  const logoFormat = config?.logo.src.endsWith('.jpg') ? 'JPEG' : 'PNG';
 
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(20);
-  doc.text(business.name, margin, 17);
+  let y: number;
 
-  doc.setFontSize(13);
-  doc.text(isTaxInvoice ? 'TAX INVOICE' : 'INVOICE', right, 14, { align: 'right' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.text(invoice.invoiceNumber, right, 21, { align: 'right' });
+  if (pdf?.headerStyle === 'plain' && config) {
+    // ---- Plain header: white page, logo block top-left, big title right ----
+    const logoW = 54;
+    const logoH = (config.logo.height / config.logo.width) * logoW;
+    if (logo) {
+      doc.addImage(logo, logoFormat, margin, 12, logoW, logoH);
+    } else {
+      doc.setFillColor(...pdf.band);
+      doc.rect(margin, 12, logoW, 24, 'F');
+    }
 
-  doc.setFontSize(8.5);
-  const headerContact = [
-    business.abn ? `ABN ${business.abn}` : '',
-    business.phone,
-    business.email,
-  ].filter(Boolean);
-  let hy = 25;
-  headerContact.forEach((line) => {
-    doc.text(line, margin, hy);
-    hy += 4.5;
-  });
+    doc.setTextColor(...accent);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(26);
+    doc.text(title, right, 22, { align: 'right' });
 
-  // ---- Dates / Bill To ----
-  doc.setTextColor(...SLATE);
-  let y = 48;
+    doc.setTextColor(...SLATE);
+    doc.setFontSize(11);
+    doc.text(invoice.invoiceNumber, right, 30, { align: 'right' });
 
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...GRAY);
+    let cy = 36;
+    const contact = [
+      business.abn ? `ABN ${business.abn}` : '',
+      business.phone,
+      business.email,
+    ].filter(Boolean);
+    contact.forEach((line) => {
+      doc.text(line, right, cy, { align: 'right' });
+      cy += 4.2;
+    });
+
+    // brand rule under the header
+    const headerBottom = Math.max(12 + logoH, cy - 4.2) + 6;
+    doc.setDrawColor(...accent);
+    doc.setLineWidth(1.2);
+    doc.line(margin, headerBottom, right, headerBottom);
+
+    y = headerBottom + 10;
+  } else {
+    // ---- Band header: full-width brand-coloured band ----
+    const bandH = 40;
+    doc.setFillColor(...(pdf?.band ?? SLATE));
+    doc.rect(0, 0, pageW, bandH, 'F');
+    // accent rule along the bottom of the band
+    doc.setFillColor(...accent);
+    doc.rect(0, bandH, pageW, 1.6, 'F');
+
+    if (logo && config) {
+      const logoH = 22;
+      const logoW = (config.logo.width / config.logo.height) * logoH;
+      if (pdf?.logoChip) {
+        doc.setFillColor(255, 255, 255);
+        doc.roundedRect(margin, 7, logoW + 8, logoH + 4, 2.5, 2.5, 'F');
+        doc.addImage(logo, logoFormat, margin + 4, 9, logoW, logoH);
+      } else {
+        doc.addImage(logo, logoFormat, margin, 9, logoW, logoH);
+      }
+    } else {
+      doc.setTextColor(...(pdf?.bandText ?? [255, 255, 255]));
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(20);
+      doc.text(business.name, margin, 20);
+    }
+
+    doc.setTextColor(...(pdf?.bandText ?? [255, 255, 255]));
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text(title, right, 16, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10.5);
+    doc.text(invoice.invoiceNumber, right, 23, { align: 'right' });
+
+    doc.setFontSize(8.5);
+    const contact = [
+      business.abn ? `ABN ${business.abn}` : '',
+      business.phone,
+      business.email,
+    ].filter(Boolean);
+    let hy = 30;
+    contact.forEach((line) => {
+      doc.text(line, right, hy, { align: 'right' });
+      hy += 4.2;
+    });
+
+    y = bandH + 14;
+  }
+
+  // ---- Bill To / dates ----
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.setTextColor(...GRAY);
+  doc.setTextColor(...accent);
   doc.text('BILL TO', margin, y);
-  doc.text('ISSUE DATE', 120, y);
+  doc.text('ISSUE DATE', 118, y);
   doc.text('DUE DATE', right, y, { align: 'right' });
 
   y += 5.5;
@@ -66,10 +163,11 @@ export function buildInvoicePDF(invoice: Invoice, business: Business): jsPDF {
   doc.text(invoice.customerName || '—', margin, y);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
-  doc.text(fmtDate(invoice.issueDate), 120, y);
+  doc.text(fmtDate(invoice.issueDate), 118, y);
   doc.text(fmtDate(invoice.dueDate), right, y, { align: 'right' });
 
   y += 5;
+  const detailTop = y;
   doc.setFontSize(8.5);
   doc.setTextColor(...GRAY);
   const custLines: string[] = [];
@@ -82,10 +180,10 @@ export function buildInvoicePDF(invoice: Invoice, business: Business): jsPDF {
   });
 
   if (business.address) {
-    doc.text(doc.splitTextToSize(business.address, 70), 120, 58.5);
+    doc.text(doc.splitTextToSize(`From: ${business.address}`, 75), 118, detailTop);
   }
 
-  y = Math.max(y, 72) + 4;
+  y = Math.max(y, (pdf?.headerStyle === 'plain' ? 0 : 40) + 38) + 6;
 
   // ---- Line items ----
   autoTable(doc, {
@@ -100,12 +198,13 @@ export function buildInvoicePDF(invoice: Invoice, business: Business): jsPDF {
     ]),
     theme: 'plain',
     headStyles: {
-      fillColor: [241, 245, 249],
-      textColor: [...SLATE],
+      fillColor: [...(pdf?.tableHeadFill ?? LIGHT)],
+      textColor: [...(pdf?.tableHeadText ?? SLATE)],
       fontStyle: 'bold',
       fontSize: 9,
     },
     bodyStyles: { fontSize: 9.5, textColor: [...SLATE], cellPadding: 3 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
     columnStyles: {
       0: { cellWidth: 'auto' },
       1: { cellWidth: 16, halign: 'center' },
@@ -124,44 +223,57 @@ export function buildInvoicePDF(invoice: Invoice, business: Business): jsPDF {
   let ty = (doc as any).lastAutoTable.finalY + 8;
 
   // ---- Totals ----
-  const labelX = 130;
-  const row = (label: string, value: string, bold = false) => {
-    doc.setFont('helvetica', bold ? 'bold' : 'normal');
-    doc.setFontSize(bold ? 11.5 : 9.5);
+  const labelX = 126;
+  const row = (label: string, value: string) => {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
     doc.setTextColor(...SLATE);
     doc.text(label, labelX, ty);
     doc.text(value, right, ty, { align: 'right' });
-    ty += bold ? 8 : 6;
+    ty += 6;
   };
 
   if (isTaxInvoice) {
     row('Subtotal', formatCurrency(invoice.subtotal));
     row('GST (10%)', formatCurrency(invoice.gstAmount));
-    doc.setDrawColor(...SLATE);
-    doc.setLineWidth(0.4);
-    doc.line(labelX, ty - 3.5, right, ty - 3.5);
-    row('Total Due', formatCurrency(invoice.total), true);
-  } else {
-    doc.setDrawColor(...SLATE);
-    doc.setLineWidth(0.4);
-    doc.line(labelX, ty - 3.5, right, ty - 3.5);
-    row('Total Due', formatCurrency(invoice.total), true);
+  }
+
+  // accent total bar
+  const totalBarH = 11;
+  doc.setFillColor(...accent);
+  doc.roundedRect(labelX - 5, ty - 4, right - labelX + 5, totalBarH, 1.5, 1.5, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text('TOTAL DUE', labelX, ty + 3);
+  doc.text(formatCurrency(invoice.total), right - 2, ty + 3, { align: 'right' });
+  ty += totalBarH + 4;
+
+  if (!isTaxInvoice) {
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(8);
     doc.setTextColor(...GRAY);
     doc.text('No GST has been charged.', right, ty, { align: 'right' });
-    ty += 6;
+    ty += 5;
+  } else {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...GRAY);
+    doc.text(`Total includes ${formatCurrency(invoice.gstAmount)} GST`, right, ty, { align: 'right' });
+    ty += 5;
   }
 
   // ---- Payment details ----
-  if (business.bsb || business.accountNumber || business.bankName) {
+  if (business.bsb || business.accountNumber || business.bankName || business.accountName) {
     ty += 4;
-    doc.setFillColor(241, 245, 249);
+    doc.setFillColor(...LIGHT);
     doc.roundedRect(margin, ty - 5, right - margin, 30, 2, 2, 'F');
+    doc.setFillColor(...accent);
+    doc.rect(margin, ty - 5, 1.6, 30, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9.5);
     doc.setTextColor(...SLATE);
-    doc.text('Payment Details', margin + 5, ty + 1);
+    doc.text('Payment Details (EFT)', margin + 6, ty + 1);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     let py = ty + 7;
@@ -172,7 +284,7 @@ export function buildInvoicePDF(invoice: Invoice, business: Business): jsPDF {
       business.accountNumber && `Account No: ${business.accountNumber}`,
     ].filter(Boolean) as string[];
     payLines.forEach((line) => {
-      doc.text(line, margin + 5, py);
+      doc.text(line, margin + 6, py);
       py += 4.6;
     });
     doc.setFont('helvetica', 'bold');
@@ -185,7 +297,7 @@ export function buildInvoicePDF(invoice: Invoice, business: Business): jsPDF {
     ty += 4;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
-    doc.setTextColor(...GRAY);
+    doc.setTextColor(...accent);
     doc.text('NOTES', margin, ty);
     ty += 5;
     doc.setFont('helvetica', 'normal');
@@ -195,22 +307,28 @@ export function buildInvoicePDF(invoice: Invoice, business: Business): jsPDF {
   }
 
   // ---- Footer ----
+  doc.setFillColor(...accent);
+  doc.rect(0, pageH - 12, pageW, 0.8, 'F');
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...GRAY);
-  doc.text('Thank you for your business', pageW / 2, 287, { align: 'center' });
+  doc.text(pdf?.footerNote ?? 'Thank you for your business', pageW / 2, pageH - 6.5, {
+    align: 'center',
+  });
 
   return doc;
 }
 
-export function downloadInvoicePDF(invoice: Invoice, business: Business): void {
-  buildInvoicePDF(invoice, business).save(`${invoice.invoiceNumber}.pdf`);
+export async function downloadInvoicePDF(invoice: Invoice, business: Business): Promise<void> {
+  const doc = await buildInvoicePDF(invoice, business);
+  doc.save(`${invoice.invoiceNumber}.pdf`);
 }
 
 // Uses the native share sheet on phones (AirDrop, SMS, email, WhatsApp…).
 // Falls back to a normal download on desktop browsers.
 export async function shareInvoicePDF(invoice: Invoice, business: Business): Promise<void> {
-  const blob = buildInvoicePDF(invoice, business).output('blob');
+  const doc = await buildInvoicePDF(invoice, business);
+  const blob = doc.output('blob');
   const file = new File([blob], `${invoice.invoiceNumber}.pdf`, { type: 'application/pdf' });
 
   if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
@@ -221,5 +339,5 @@ export async function shareInvoicePDF(invoice: Invoice, business: Business): Pro
       if ((err as Error).name === 'AbortError') return; // user closed the share sheet
     }
   }
-  downloadInvoicePDF(invoice, business);
+  doc.save(`${invoice.invoiceNumber}.pdf`);
 }
