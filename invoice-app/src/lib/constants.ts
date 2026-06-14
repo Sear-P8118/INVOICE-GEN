@@ -28,15 +28,19 @@ export interface BusinessConfig {
     accentText: string;
   };
   pdf: {
-    /** 'band' = full-width coloured header band; 'plain' = white header with logo block. */
-    headerStyle: 'band' | 'plain';
-    band: RGB; // band fill (band style) / logo block colour (plain style)
+    /** Which PDF template renderer to use. */
+    template: 'cbp' | 'bfd' | 'fremantle';
+    /** true = listed prices already include GST; false = GST is added on top. */
+    gstInclusive: boolean;
+    band: RGB; // primary brand fill (headers / bars)
     bandText: RGB;
-    accent: RGB; // rules, doc title (plain style), totals
+    accent: RGB; // rules, doc title, totals
     tableHeadFill: RGB;
     tableHeadText: RGB;
-    /** Put the logo on a white rounded chip inside the band (for logos with white backgrounds). */
+    /** Put the logo on a white rounded chip inside dark headers. */
     logoChip?: boolean;
+    /** Short bullet terms shown in the footer. */
+    terms: string[];
     footerNote: string;
   };
   /** Sensible starting values for the editable business settings. */
@@ -56,14 +60,20 @@ export const BUSINESSES: BusinessConfig[] = [
       accentText: 'text-[#FF6B35]',
     },
     pdf: {
-      headerStyle: 'band',
+      template: 'cbp',
+      gstInclusive: false, // prices are ex-GST; GST added on top
       band: [30, 58, 95], // navy #1E3A5F
       bandText: [255, 255, 255],
       accent: [255, 107, 53], // orange #FF6B35
       tableHeadFill: [30, 58, 95],
       tableHeadText: [255, 255, 255],
       logoChip: true,
-      footerNote: 'Car Battery Perth 24/7 · Mobile battery replacement, Perth-wide',
+      terms: [
+        'Payment due within 7 days of the invoice date.',
+        'Goods remain the property of Car Battery Perth 24/7 until paid in full.',
+        '12-month warranty on all batteries supplied.',
+      ],
+      footerNote: 'Thank you for your business.',
     },
     defaults: { phone: '(08) 9456 4378', paymentTermsDays: 7 },
   },
@@ -79,13 +89,19 @@ export const BUSINESSES: BusinessConfig[] = [
       accentText: 'text-red-500',
     },
     pdf: {
-      headerStyle: 'band',
-      band: [11, 11, 12], // near black
+      template: 'bfd',
+      gstInclusive: true, // listed prices include GST
+      band: [17, 17, 19], // near black
       bandText: [255, 255, 255],
       accent: [220, 38, 38], // red
       tableHeadFill: [24, 24, 27],
       tableHeadText: [255, 255, 255],
-      footerNote: 'Battery Factory Direct · Car · Truck · Marine · Industrial',
+      terms: [
+        'Payment due on receipt unless otherwise agreed.',
+        'Goods remain the property of Battery Factory Direct until paid in full.',
+        'Warranty applies as stated on this invoice.',
+      ],
+      footerNote: 'Thank you for choosing Battery Factory Direct.',
     },
     defaults: { paymentTermsDays: 14 },
   },
@@ -101,13 +117,19 @@ export const BUSINESSES: BusinessConfig[] = [
       accentText: 'text-[#e11b22]',
     },
     pdf: {
-      headerStyle: 'plain',
-      band: [236, 28, 36], // logo block red
+      template: 'fremantle',
+      gstInclusive: true, // prices include GST ("Included")
+      band: [237, 28, 36], // brand red
       bandText: [255, 255, 255],
-      accent: [225, 27, 34],
-      tableHeadFill: [225, 27, 34],
+      accent: [237, 28, 36],
+      tableHeadFill: [237, 28, 36],
       tableHeadText: [255, 255, 255],
-      footerNote: 'Fremantle Batteries · Thank you for your business',
+      terms: [
+        'Payment due within 7 days.',
+        'All prices are inclusive of GST unless otherwise stated.',
+        'Please retain this invoice for your records.',
+      ],
+      footerNote: 'Thank you for your business.',
     },
     defaults: {
       phone: '0433 483 777',

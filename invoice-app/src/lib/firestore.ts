@@ -137,14 +137,20 @@ export async function claimNextInvoiceNumber(businessId: string): Promise<string
 
 // ---------- Totals ----------
 
-export function calcTotals(lineItems: LineItem[], gstRegistered: boolean) {
-  const subtotal = lineItems.reduce((sum, i) => sum + (i.quantity || 0) * (i.unitPrice || 0), 0);
-  const gstAmount = gstRegistered ? subtotal * GST_RATE : 0;
-  return {
-    subtotal: round2(subtotal),
-    gstAmount: round2(gstAmount),
-    total: round2(subtotal + gstAmount),
-  };
+export function calcTotals(lineItems: LineItem[], gstRegistered: boolean, gstInclusive = false) {
+  const sum = lineItems.reduce((s, i) => s + (i.quantity || 0) * (i.unitPrice || 0), 0);
+
+  if (!gstRegistered) {
+    return { subtotal: round2(sum), gstAmount: 0, total: round2(sum) };
+  }
+  if (gstInclusive) {
+    // Listed prices already include GST: back it out of the total.
+    const subtotal = sum / (1 + GST_RATE);
+    return { subtotal: round2(subtotal), gstAmount: round2(sum - subtotal), total: round2(sum) };
+  }
+  // GST added on top of listed prices.
+  const gstAmount = sum * GST_RATE;
+  return { subtotal: round2(sum), gstAmount: round2(gstAmount), total: round2(sum + gstAmount) };
 }
 
 function round2(n: number): number {

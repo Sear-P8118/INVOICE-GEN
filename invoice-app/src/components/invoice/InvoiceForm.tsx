@@ -104,7 +104,11 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
   }
 
   const gstRegistered = existing ? existing.gstRegistered : business?.gstRegistered || false;
-  const totals = useMemo(() => calcTotals(lineItems, gstRegistered), [lineItems, gstRegistered]);
+  const gstInclusive = config.pdf.gstInclusive;
+  const totals = useMemo(
+    () => calcTotals(lineItems, gstRegistered, gstInclusive),
+    [lineItems, gstRegistered, gstInclusive]
+  );
   const overdueDays = type === 'Overdue' ? daysOverdue(dueDate) : 0;
 
   const updateItem = (id: string, patch: Partial<LineItem>) =>
@@ -145,7 +149,7 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
       ? existing.invoiceNumber
       : await claimNextInvoiceNumber(businessId);
 
-    const totalsNow = calcTotals(items, gstRegistered);
+    const totalsNow = calcTotals(items, gstRegistered, gstInclusive);
     const now = new Date().toISOString();
 
     const id = await saveInvoice({

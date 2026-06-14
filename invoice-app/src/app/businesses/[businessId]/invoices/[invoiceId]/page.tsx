@@ -66,7 +66,7 @@ export default function InvoiceDetailPage() {
   const overdueDays = invoice.status === 'Overdue' ? daysOverdue(invoice.dueDate) : 0;
   const accentHex = `rgb(${config.pdf.accent.join(',')})`;
   const bandHex = `rgb(${config.pdf.band.join(',')})`;
-  const bandIsLight = config.pdf.headerStyle === 'plain';
+  const bandIsLight = false; // all three templates now use a coloured header band
 
   return (
     <div>
