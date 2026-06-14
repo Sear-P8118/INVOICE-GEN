@@ -11,7 +11,7 @@ import Sheet from '@/components/ui/Sheet';
 import { getBusiness, getInvoice, updateInvoiceStatus, deleteInvoice } from '@/lib/firestore';
 import { downloadInvoicePDF, shareInvoicePDF } from '@/lib/pdf';
 import { formatCurrency, getBusinessConfig } from '@/lib/constants';
-import { Business, Invoice, InvoiceStatus, INVOICE_STATUSES, effectiveStatus } from '@/types';
+import { Business, Invoice, InvoiceStatus, INVOICE_STATUSES, effectiveStatus, daysOverdue } from '@/types';
 
 export default function InvoiceDetailPage() {
   const { businessId, invoiceId } = useParams<{ businessId: string; invoiceId: string }>();
@@ -57,7 +57,13 @@ export default function InvoiceDetailPage() {
     );
   }
 
-  const docLabel = invoice.gstRegistered ? 'TAX INVOICE' : 'INVOICE';
+  const isQuote = invoice.status === 'Quote';
+  const showDue = invoice.status === 'Pending' || invoice.status === 'Overdue';
+  const docLabel = isQuote ? 'QUOTE' : invoice.gstRegistered ? 'TAX INVOICE' : 'INVOICE';
+  const leftDateLabel = isQuote ? 'Dated' : invoice.status === 'Paid' ? 'Paid' : 'Issued';
+  const totalLabel =
+    invoice.status === 'Paid' ? 'Total paid' : isQuote ? 'Quote total' : 'Total due';
+  const overdueDays = invoice.status === 'Overdue' ? daysOverdue(invoice.dueDate) : 0;
   const accentHex = `rgb(${config.pdf.accent.join(',')})`;
   const bandHex = `rgb(${config.pdf.band.join(',')})`;
   const bandIsLight = config.pdf.headerStyle === 'plain';
@@ -132,11 +138,18 @@ export default function InvoiceDetailPage() {
                 <StatusBadge status={effectiveStatus(invoice)} />
               </div>
               <p className="mt-2 text-xs text-slate-400">
-                Issued <span className="font-medium text-slate-700">{invoice.issueDate}</span>
+                {leftDateLabel} <span className="font-medium text-slate-700">{invoice.issueDate}</span>
               </p>
-              <p className="text-xs text-slate-400">
-                Due <span className="font-medium text-slate-700">{invoice.dueDate}</span>
-              </p>
+              {showDue && (
+                <p className="text-xs text-slate-400">
+                  Due <span className="font-medium text-slate-700">{invoice.dueDate}</span>
+                </p>
+              )}
+              {overdueDays > 0 && (
+                <p className="text-xs font-semibold text-red-600">
+                  {overdueDays} day{overdueDays === 1 ? '' : 's'} overdue
+                </p>
+              )}
             </div>
           </div>
 
@@ -188,7 +201,7 @@ export default function InvoiceDetailPage() {
                 className="flex items-center justify-between rounded-lg px-3 py-2 text-base font-bold text-white"
                 style={{ backgroundColor: accentHex }}
               >
-                <span>Total due</span>
+                <span>{totalLabel}</span>
                 <span>{formatCurrency(invoice.total)}</span>
               </div>
               <p className="text-right text-[11px] text-slate-400">

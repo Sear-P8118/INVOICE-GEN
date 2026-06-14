@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Trash2, UserPlus } from 'lucide-react';
-import { Business, Customer, Invoice, InvoiceStatus, LineItem } from '@/types';
+import { Plus, Trash2, UserPlus, Truck, Wrench, Share2, Save } from 'lucide-react';
+import { Business, Customer, Invoice, InvoiceStatus, LineItem, daysOverdue } from '@/types';
 import {
   calcTotals,
   claimNextInvoiceNumber,
@@ -12,7 +12,8 @@ import {
   saveCustomer,
   saveInvoice,
 } from '@/lib/firestore';
-import { formatCurrency } from '@/lib/constants';
+import { formatCurrency, getBusinessConfig } from '@/lib/constants';
+import { shareInvoicePDF } from '@/lib/pdf';
 import { Input, Textarea, Select, Label } from '@/components/ui/Field';
 import Button from '@/components/ui/Button';
 import Sheet from '@/components/ui/Sheet';
@@ -24,35 +25,64 @@ interface Props {
   duplicateFrom?: Invoice; // prefill for duplicates
 }
 
-const emptyItem = (): LineItem => ({
+// The four document types you can create, with their button colours.
+const TYPES: {
+  value: InvoiceStatus;
+  label: string;
+  on: string; // selected
+  off: string; // not selected
+}[] = [
+  { value: 'Paid', label: 'Paid', on: 'bg-emerald-600 text-white shadow-sm', off: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+  { value: 'Overdue', label: 'Overdue', on: 'bg-red-600 text-white shadow-sm', off: 'bg-red-50 text-red-700 border border-red-200' },
+  { value: 'Pending', label: 'Pending', on: 'bg-amber-500 text-white shadow-sm', off: 'bg-amber-50 text-amber-700 border border-amber-200' },
+  { value: 'Quote', label: 'Quote', on: 'bg-blue-600 text-white shadow-sm', off: 'bg-blue-50 text-blue-700 border border-blue-200' },
+];
+
+const TYPE_HINT: Record<string, string> = {
+  Paid: 'Sale already paid — records the date paid.',
+  Overdue: 'Unpaid past its due date — shows how many days overdue.',
+  Pending: 'Awaiting payment — issued now, due later.',
+  Quote: 'A priced offer. No payment owed, no due date.',
+};
+
+const today = () => format(new Date(), 'yyyy-MM-dd');
+
+const emptyItem = (description = ''): LineItem => ({
   id: crypto.randomUUID(),
-  description: '',
+  description,
   quantity: 1,
   unitPrice: 0,
 });
 
+function initialType(source?: Invoice): InvoiceStatus {
+  const s = source?.status;
+  if (s === 'Paid' || s === 'Overdue' || s === 'Pending' || s === 'Quote') return s;
+  return 'Pending'; // default for new + legacy drafts
+}
+
 export default function InvoiceForm({ businessId, existing, duplicateFrom }: Props) {
   const router = useRouter();
   const source = existing || duplicateFrom;
+  const config = getBusinessConfig(businessId)!;
 
   const [business, setBusiness] = useState<Business | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState(source?.customerId || '');
-  const [issueDate, setIssueDate] = useState(
-    existing?.issueDate || format(new Date(), 'yyyy-MM-dd')
-  );
+  const [type, setType] = useState<InvoiceStatus>(initialType(source));
+  const [issueDate, setIssueDate] = useState(existing?.issueDate || today());
   const [dueDate, setDueDate] = useState(existing?.dueDate || '');
   const [lineItems, setLineItems] = useState<LineItem[]>(
     source ? source.lineItems.map((i) => ({ ...i, id: crypto.randomUUID() })) : [emptyItem()]
   );
   const [notes, setNotes] = useState(source?.notes || '');
-  const [status, setStatus] = useState<InvoiceStatus>(existing?.status || 'Draft');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   // New-customer sheet
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [newCust, setNewCust] = useState({ name: '', email: '', phone: '', address: '' });
+
+  const needsDue = type === 'Pending' || type === 'Overdue';
 
   useEffect(() => {
     Promise.all([getBusiness(businessId), getCustomers(businessId)]).then(([biz, custs]) => {
@@ -64,11 +94,23 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
     });
   }, [businessId, existing]);
 
+  // Switching to a type that needs a due date fills a sensible default.
+  function chooseType(next: InvoiceStatus) {
+    setType(next);
+    if ((next === 'Pending' || next === 'Overdue') && !dueDate) {
+      const terms = business?.paymentTermsDays ?? 14;
+      setDueDate(format(addDays(new Date(), terms), 'yyyy-MM-dd'));
+    }
+  }
+
   const gstRegistered = existing ? existing.gstRegistered : business?.gstRegistered || false;
   const totals = useMemo(() => calcTotals(lineItems, gstRegistered), [lineItems, gstRegistered]);
+  const overdueDays = type === 'Overdue' ? daysOverdue(dueDate) : 0;
 
   const updateItem = (id: string, patch: Partial<LineItem>) =>
     setLineItems((items) => items.map((i) => (i.id === id ? { ...i, ...patch } : i)));
+
+  const addItem = (description = '') => setLineItems((items) => [...items, emptyItem(description)]);
 
   async function handleAddCustomer() {
     if (!newCust.name.trim()) return;
@@ -80,51 +122,125 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
     setNewCust({ name: '', email: '', phone: '', address: '' });
   }
 
-  async function handleSave() {
+  // Persist the invoice; returns the saved record (with id) or null on failure.
+  async function persist(): Promise<{ invoice: Invoice; business: Business } | null> {
     setError('');
     const customer = customers.find((c) => c.id === customerId);
     if (!customer) {
       setError('Please choose a customer.');
-      return;
+      return null;
     }
     const items = lineItems.filter((i) => i.description.trim());
     if (items.length === 0) {
       setError('Add at least one line item with a description.');
-      return;
+      return null;
     }
+    if (!business) return null;
 
+    // Quote = today's date, no due. Paid = the single date, no due.
+    const finalIssue = type === 'Quote' ? today() : issueDate;
+    const finalDue = needsDue ? dueDate : '';
+
+    const invoiceNumber = existing
+      ? existing.invoiceNumber
+      : await claimNextInvoiceNumber(businessId);
+
+    const totalsNow = calcTotals(items, gstRegistered);
+    const now = new Date().toISOString();
+
+    const id = await saveInvoice({
+      id: existing?.id,
+      invoiceNumber,
+      businessId,
+      customerId: customer.id,
+      customerName: customer.name,
+      customerEmail: customer.email,
+      customerPhone: customer.phone,
+      customerAddress: customer.address,
+      issueDate: finalIssue,
+      dueDate: finalDue,
+      lineItems: items,
+      gstRegistered,
+      ...totalsNow,
+      status: type,
+      notes,
+    });
+
+    const invoice: Invoice = {
+      id,
+      invoiceNumber,
+      businessId,
+      customerId: customer.id,
+      customerName: customer.name,
+      customerEmail: customer.email,
+      customerPhone: customer.phone,
+      customerAddress: customer.address,
+      issueDate: finalIssue,
+      dueDate: finalDue,
+      lineItems: items,
+      gstRegistered,
+      ...totalsNow,
+      status: type,
+      notes,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    };
+    return { invoice, business };
+  }
+
+  async function handleSaveAndShare() {
     setSaving(true);
     try {
-      const invoiceNumber = existing
-        ? existing.invoiceNumber
-        : await claimNextInvoiceNumber(businessId);
-
-      const id = await saveInvoice({
-        id: existing?.id,
-        invoiceNumber,
-        businessId,
-        customerId: customer.id,
-        customerName: customer.name,
-        customerEmail: customer.email,
-        customerPhone: customer.phone,
-        customerAddress: customer.address,
-        issueDate,
-        dueDate,
-        lineItems: items,
-        gstRegistered,
-        ...calcTotals(items, gstRegistered),
-        status,
-        notes,
-      });
-      router.replace(`/businesses/${businessId}/invoices/${id}`);
+      const res = await persist();
+      if (!res) {
+        setSaving(false);
+        return;
+      }
+      await shareInvoicePDF(res.invoice, res.business);
+      router.replace(`/businesses/${businessId}/invoices/${res.invoice.id}`);
     } catch {
-      setError('Could not save the invoice. Check your connection and try again.');
+      setError('Could not save. Check your connection and try again.');
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveOnly() {
+    setSaving(true);
+    try {
+      const res = await persist();
+      if (!res) {
+        setSaving(false);
+        return;
+      }
+      router.replace(`/businesses/${businessId}/invoices/${res.invoice.id}`);
+    } catch {
+      setError('Could not save. Check your connection and try again.');
       setSaving(false);
     }
   }
 
   return (
     <div className="space-y-6 px-4 py-4">
+      {/* Document type */}
+      <section>
+        <Label>Type</Label>
+        <div className="grid grid-cols-4 gap-2">
+          {TYPES.map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => chooseType(t.value)}
+              className={`rounded-xl py-2.5 text-sm font-bold transition-colors ${
+                type === t.value ? t.on : t.off
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-slate-500">{TYPE_HINT[type]}</p>
+      </section>
+
       {/* Customer */}
       <section>
         <div className="flex items-end gap-2">
@@ -139,8 +255,9 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
             </Select>
           </div>
           <button
+            type="button"
             onClick={() => setShowNewCustomer(true)}
-            className="flex h-[50px] w-[50px] items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 active:bg-slate-100"
+            className={`flex h-[50px] w-[50px] items-center justify-center rounded-xl text-white ${config.ui.accent}`}
             aria-label="Add customer"
           >
             <UserPlus size={20} />
@@ -148,10 +265,36 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
         </div>
       </section>
 
-      {/* Dates */}
-      <section className="grid grid-cols-2 gap-3">
-        <Input label="Issue date" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
-        <Input label="Due date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+      {/* Dates — depend on the type */}
+      <section>
+        {type === 'Quote' && (
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+            <p className="text-xs font-medium text-slate-500">Quote date</p>
+            <p className="text-base font-semibold text-slate-900">{format(new Date(), 'd MMM yyyy')}</p>
+          </div>
+        )}
+
+        {type === 'Paid' && (
+          <Input
+            label="Date paid"
+            type="date"
+            value={issueDate}
+            onChange={(e) => setIssueDate(e.target.value)}
+          />
+        )}
+
+        {needsDue && (
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Issue date" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+            <Input label="Due date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          </div>
+        )}
+
+        {type === 'Overdue' && (
+          <p className="mt-2 inline-flex rounded-lg bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700">
+            {overdueDays > 0 ? `${overdueDays} day${overdueDays === 1 ? '' : 's'} overdue` : 'Not past due yet — set an earlier due date'}
+          </p>
+        )}
       </section>
 
       {/* Line items */}
@@ -197,6 +340,7 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
                   {formatCurrency((item.quantity || 0) * (item.unitPrice || 0))}
                 </span>
                 <button
+                  type="button"
                   onClick={() => setLineItems((items) => items.filter((i) => i.id !== item.id))}
                   disabled={lineItems.length === 1}
                   className="rounded-lg p-2 text-slate-400 active:bg-red-50 active:text-red-500 disabled:opacity-30"
@@ -208,12 +352,32 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
             </div>
           ))}
         </div>
+
+        {/* Add item + quick adds (all coloured in the brand) */}
         <button
-          onClick={() => setLineItems((items) => [...items, emptyItem()])}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 py-3 text-sm font-semibold text-slate-500 active:bg-slate-100"
+          type="button"
+          onClick={() => addItem()}
+          className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed py-3 text-sm font-bold ${config.ui.accentText}`}
+          style={{ borderColor: 'currentColor' }}
         >
           <Plus size={18} /> Add item
         </button>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => addItem('Delivery')}
+            className={`flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white ${config.ui.accent}`}
+          >
+            <Truck size={18} /> Delivery
+          </button>
+          <button
+            type="button"
+            onClick={() => addItem('Installation')}
+            className={`flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white ${config.ui.accent}`}
+          >
+            <Wrench size={18} /> Installation
+          </button>
+        </div>
       </section>
 
       {/* Totals */}
@@ -241,16 +405,8 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
         )}
       </section>
 
-      {/* Status + notes */}
-      <Select label="Status" value={status} onChange={(e) => setStatus(e.target.value as InvoiceStatus)}>
-        <option>Draft</option>
-        <option>Pending</option>
-        <option>Paid</option>
-        <option>Overdue</option>
-      </Select>
-
       <Textarea
-        label="Notes (shown on the invoice)"
+        label="Notes (shown on the document)"
         rows={2}
         placeholder="e.g. 12 month warranty on all batteries"
         value={notes}
@@ -259,9 +415,25 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
-      <Button full disabled={saving || !business} onClick={handleSave} className="min-h-13">
-        {saving ? 'Saving…' : existing ? 'Save Changes' : 'Save Invoice'}
-      </Button>
+      {/* Actions */}
+      <div className="space-y-2">
+        <Button
+          full
+          disabled={saving || !business}
+          onClick={handleSaveAndShare}
+          className={`min-h-13 ${config.ui.accent} text-white`}
+        >
+          <Share2 size={18} /> {saving ? 'Working…' : 'Save & Share'}
+        </Button>
+        <button
+          type="button"
+          disabled={saving || !business}
+          onClick={handleSaveOnly}
+          className="flex w-full items-center justify-center gap-2 py-2 text-sm font-semibold text-slate-500 disabled:opacity-40"
+        >
+          <Save size={16} /> Save without sharing
+        </button>
+      </div>
 
       {/* New customer sheet */}
       <Sheet open={showNewCustomer} onClose={() => setShowNewCustomer(false)} title="New Customer">
@@ -270,7 +442,7 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
           <Input label="Phone" type="tel" inputMode="tel" value={newCust.phone} onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })} />
           <Input label="Email" type="email" inputMode="email" value={newCust.email} onChange={(e) => setNewCust({ ...newCust, email: e.target.value })} />
           <Textarea label="Address" rows={2} value={newCust.address} onChange={(e) => setNewCust({ ...newCust, address: e.target.value })} />
-          <Button full onClick={handleAddCustomer} disabled={!newCust.name.trim()}>
+          <Button full onClick={handleAddCustomer} disabled={!newCust.name.trim()} className={`${config.ui.accent} text-white`}>
             Add Customer
           </Button>
         </div>

@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Business, Invoice } from '@/types';
+import { Business, Invoice, daysOverdue } from '@/types';
 import { RGB, formatCurrency, getBusinessConfig } from './constants';
 import { format, parseISO } from 'date-fns';
 
@@ -49,8 +49,9 @@ export async function buildInvoicePDF(invoice: Invoice, business: Business): Pro
   const pageH = doc.internal.pageSize.getHeight();
   const margin = 16;
   const right = pageW - margin;
-  const isTaxInvoice = invoice.gstRegistered;
-  const title = isTaxInvoice ? 'TAX INVOICE' : 'INVOICE';
+  const isQuote = invoice.status === 'Quote';
+  const isTaxInvoice = invoice.gstRegistered && !isQuote;
+  const title = isQuote ? 'QUOTE' : isTaxInvoice ? 'TAX INVOICE' : 'INVOICE';
 
   const pdf = config?.pdf;
   const accent: RGB = pdf?.accent ?? SLATE;
@@ -150,12 +151,16 @@ export async function buildInvoicePDF(invoice: Invoice, business: Business): Pro
   }
 
   // ---- Bill To / dates ----
+  const showDue = invoice.status === 'Pending' || invoice.status === 'Overdue';
+  const leftDateLabel =
+    isQuote ? 'DATE' : invoice.status === 'Paid' ? 'DATE PAID' : 'ISSUE DATE';
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(...accent);
   doc.text('BILL TO', margin, y);
-  doc.text('ISSUE DATE', 118, y);
-  doc.text('DUE DATE', right, y, { align: 'right' });
+  doc.text(leftDateLabel, 118, y);
+  if (showDue) doc.text('DUE DATE', right, y, { align: 'right' });
 
   y += 5.5;
   doc.setTextColor(...SLATE);
@@ -164,7 +169,19 @@ export async function buildInvoicePDF(invoice: Invoice, business: Business): Pro
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
   doc.text(fmtDate(invoice.issueDate), 118, y);
-  doc.text(fmtDate(invoice.dueDate), right, y, { align: 'right' });
+  if (showDue) doc.text(fmtDate(invoice.dueDate), right, y, { align: 'right' });
+
+  if (invoice.status === 'Overdue') {
+    const od = daysOverdue(invoice.dueDate);
+    if (od > 0) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(220, 38, 38);
+      doc.text(`${od} DAY${od === 1 ? '' : 'S'} OVERDUE`, right, y + 4.8, { align: 'right' });
+      doc.setTextColor(...SLATE);
+      doc.setFont('helvetica', 'normal');
+    }
+  }
 
   y += 5;
   const detailTop = y;
@@ -242,10 +259,12 @@ export async function buildInvoicePDF(invoice: Invoice, business: Business): Pro
   const totalBarH = 11;
   doc.setFillColor(...accent);
   doc.roundedRect(labelX - 5, ty - 4, right - labelX + 5, totalBarH, 1.5, 1.5, 'F');
+  const totalLabel =
+    invoice.status === 'Paid' ? 'TOTAL PAID' : isQuote ? 'QUOTE TOTAL' : 'TOTAL DUE';
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11.5);
   doc.setTextColor(255, 255, 255);
-  doc.text('TOTAL DUE', labelX, ty + 3);
+  doc.text(totalLabel, labelX, ty + 3);
   doc.text(formatCurrency(invoice.total), right - 2, ty + 3, { align: 'right' });
   ty += totalBarH + 4;
 

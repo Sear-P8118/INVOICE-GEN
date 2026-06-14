@@ -32,22 +32,43 @@ export interface LineItem {
   unitPrice: number;
 }
 
-export type InvoiceStatus = 'Draft' | 'Pending' | 'Paid' | 'Overdue';
+// 'Draft' is legacy (kept so old records + their badge still render); we no longer
+// create drafts. 'Quote' is a non-invoice document type that shares this field.
+export type InvoiceStatus = 'Draft' | 'Pending' | 'Paid' | 'Overdue' | 'Quote';
 
-export const INVOICE_STATUSES: InvoiceStatus[] = ['Draft', 'Pending', 'Paid', 'Overdue'];
+// The types you can pick when creating, in the order shown in the picker.
+export const INVOICE_STATUSES: InvoiceStatus[] = ['Pending', 'Paid', 'Overdue', 'Quote'];
+
+// Quote = priced offer, no payment owed. Pending/Overdue carry a due date.
+export const DOC_TYPES_NEED_DUE: InvoiceStatus[] = ['Pending', 'Overdue'];
 
 // Invoices saved before the rename used 'Sent'.
 export function normalizeStatus(status: string): InvoiceStatus {
   if (status === 'Sent') return 'Pending';
+  if (status === 'Draft') return 'Draft';
   return (INVOICE_STATUSES as string[]).includes(status) ? (status as InvoiceStatus) : 'Draft';
+}
+
+function localToday(): string {
+  const now = new Date(); // local date, not UTC
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+/** Whole days a date is in the past (0 if today or future). */
+export function daysOverdue(dueDate: string): number {
+  if (!dueDate) return 0;
+  const [y, m, d] = dueDate.split('-').map(Number);
+  const due = Date.UTC(y, m - 1, d);
+  const [ty, tm, td] = localToday().split('-').map(Number);
+  const today = Date.UTC(ty, tm - 1, td);
+  const diff = Math.floor((today - due) / 86_400_000);
+  return diff > 0 ? diff : 0;
 }
 
 /** What the invoice effectively is right now: a Pending invoice past its due date shows as Overdue. */
 export function effectiveStatus(invoice: Pick<Invoice, 'status' | 'dueDate'>): InvoiceStatus {
   if (invoice.status === 'Pending' && invoice.dueDate) {
-    const now = new Date(); // local date, not UTC
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    if (invoice.dueDate < today) return 'Overdue';
+    if (invoice.dueDate < localToday()) return 'Overdue';
   }
   return invoice.status;
 }
