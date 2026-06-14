@@ -192,20 +192,41 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
     return { invoice, business };
   }
 
+  function describeSaveError(e: unknown): string {
+    const err = e as { code?: string; message?: string };
+    switch (err?.code) {
+      case 'permission-denied':
+        return 'The database blocked this save. Your sign-in email needs adding to the Firestore security rules (Firebase console → Firestore → Rules), then re-publish.';
+      case 'unavailable':
+      case 'failed-precondition':
+      case 'deadline-exceeded':
+        return 'Can’t reach the database right now. Check your internet connection and try again.';
+      default:
+        return `Could not save: ${err?.code || err?.message || 'unknown error'}.`;
+    }
+  }
+
   async function handleSaveAndShare() {
     setSaving(true);
+    let res: Awaited<ReturnType<typeof persist>>;
     try {
-      const res = await persist();
-      if (!res) {
-        setSaving(false);
-        return;
-      }
-      await shareInvoicePDF(res.invoice, res.business);
-      router.replace(`/businesses/${businessId}/invoices/${res.invoice.id}`);
-    } catch {
-      setError('Could not save. Check your connection and try again.');
+      res = await persist();
+    } catch (e) {
+      setError(describeSaveError(e));
       setSaving(false);
+      return;
     }
+    if (!res) {
+      setSaving(false);
+      return;
+    }
+    // The invoice is saved. Sharing is best-effort and must never report a save error.
+    try {
+      await shareInvoicePDF(res.invoice, res.business);
+    } catch {
+      /* user cancelled or the platform blocked sharing — the invoice is still saved */
+    }
+    router.replace(`/businesses/${businessId}/invoices/${res.invoice.id}`);
   }
 
   async function handleSaveOnly() {
@@ -217,8 +238,8 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
         return;
       }
       router.replace(`/businesses/${businessId}/invoices/${res.invoice.id}`);
-    } catch {
-      setError('Could not save. Check your connection and try again.');
+    } catch (e) {
+      setError(describeSaveError(e));
       setSaving(false);
     }
   }

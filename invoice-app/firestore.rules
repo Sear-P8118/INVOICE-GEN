@@ -3,14 +3,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Only your two accounts can touch any data.
-    // Replace these with the two email addresses you create in
-    // Firebase Authentication (must match exactly, lowercase).
+    // Only these accounts can touch any data. Add more emails here
+    // (lowercase) to grant staff access, then re-publish the rules.
     function isOwner() {
       return request.auth != null
-        && request.auth.token.email in [
-          'owner1@example.com',
-          'owner2@example.com'
+        && request.auth.token.email.lower() in [
+          'popalholding24@outlook.com'
         ];
     }
 
