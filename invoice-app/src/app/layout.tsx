@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body
         suppressHydrationWarning
-        className={`${inter.className} min-h-dvh bg-slate-50 text-slate-900 antialiased`}
+        className={`${inter.className} min-h-dvh text-slate-900 antialiased`}
       >
         {children}
         <ServiceWorkerRegister />

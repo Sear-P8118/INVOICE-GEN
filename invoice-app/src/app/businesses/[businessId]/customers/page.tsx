@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Plus, Search, Phone, Mail, Trash2, Pencil } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Trash2, Pencil, Users } from 'lucide-react';
 import TopBar from '@/components/ui/TopBar';
 import Sheet from '@/components/ui/Sheet';
 import Button from '@/components/ui/Button';
@@ -95,12 +95,18 @@ export default function CustomersPage() {
         <div className="mt-4 space-y-2.5">
           {!filtered && <p className="py-10 text-center text-sm text-slate-400">Loading…</p>}
           {filtered && filtered.length === 0 && (
-            <p className="rounded-xl bg-white py-10 text-center text-sm text-slate-400">
-              {customers?.length === 0 ? 'No customers yet. Tap + to add one.' : 'No matches.'}
-            </p>
+            <div className="rounded-2xl border border-slate-100 bg-white/70 py-12 text-center shadow-sm ring-1 ring-slate-100">
+              <Users className="mx-auto mb-2 text-slate-300" size={34} strokeWidth={1.6} />
+              <p className="text-sm font-semibold text-slate-600">
+                {customers?.length === 0 ? 'No customers yet' : 'No matches'}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-400">
+                {customers?.length === 0 ? 'Tap + to add your first one.' : 'Try a different search.'}
+              </p>
+            </div>
           )}
           {filtered?.map((c) => (
-            <div key={c.id} className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+            <div key={c.id} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm ring-1 ring-slate-100/70">
               <div className="flex items-start justify-between gap-2">
                 <p className="font-semibold text-slate-900">{c.name}</p>
                 <div className="flex gap-1">

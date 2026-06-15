@@ -61,7 +61,7 @@ export const BUSINESSES: BusinessConfig[] = [
     },
     pdf: {
       template: 'cbp',
-      gstInclusive: false, // prices are ex-GST; GST added on top
+      gstInclusive: true, // entered prices already include GST — never add 10% on top
       band: [30, 58, 95], // navy #1E3A5F
       bandText: [255, 255, 255],
       accent: [255, 107, 53], // orange #FF6B35
@@ -69,13 +69,24 @@ export const BUSINESSES: BusinessConfig[] = [
       tableHeadText: [255, 255, 255],
       logoChip: true,
       terms: [
-        'Payment due within 7 days of the invoice date.',
-        'Goods remain the property of Car Battery Perth 24/7 until paid in full.',
+        'Payment due within 14 days of the invoice date, or by the date agreed.',
+        'Goods remain the property of Car Battery Perth until paid in full.',
         '12-month warranty on all batteries supplied.',
       ],
       footerNote: 'Thank you for your business.',
     },
-    defaults: { phone: '(08) 9456 4378', paymentTermsDays: 7 },
+    defaults: {
+      abn: '34 418 191 459',
+      phone: '(08) 9456 4378',
+      email: 'carbatteryperth@gmail.com',
+      address: 'Servicing All Perth Metro · Bannister Rd, Canning Vale',
+      accountName: 'Car Battery Perth',
+      bsb: '036-224',
+      accountNumber: '574315',
+      gstRegistered: true,
+      nextInvoiceNumber: 1300,
+      paymentTermsDays: 14,
+    },
   },
   {
     id: 'battery-factory-direct',
@@ -97,13 +108,24 @@ export const BUSINESSES: BusinessConfig[] = [
       tableHeadFill: [24, 24, 27],
       tableHeadText: [255, 255, 255],
       terms: [
-        'Payment due on receipt unless otherwise agreed.',
+        'Payment due within 14 days of the invoice date, or by the date agreed.',
         'Goods remain the property of Battery Factory Direct until paid in full.',
         'Warranty applies as stated on this invoice.',
       ],
       footerNote: 'Thank you for choosing Battery Factory Direct.',
     },
-    defaults: { paymentTermsDays: 14 },
+    defaults: {
+      abn: '62 524 870 529',
+      phone: '(08) 9451 4048',
+      email: 'admin@batteryfactorydirect.com.au',
+      address: 'Unit 11/95 Kelvin Rd, Maddington',
+      accountName: 'Battery Factory Direct',
+      bsb: '036-224',
+      accountNumber: '574315',
+      gstRegistered: true,
+      nextInvoiceNumber: 1300,
+      paymentTermsDays: 14,
+    },
   },
   {
     id: 'fremantle-batteries',
@@ -125,19 +147,23 @@ export const BUSINESSES: BusinessConfig[] = [
       tableHeadFill: [237, 28, 36],
       tableHeadText: [255, 255, 255],
       terms: [
-        'Payment due within 7 days.',
+        'Payment due within 14 days of the invoice date, or by the date agreed.',
         'All prices are inclusive of GST unless otherwise stated.',
         'Please retain this invoice for your records.',
       ],
       footerNote: 'Thank you for your business.',
     },
     defaults: {
-      phone: '0433 483 777',
-      address: '190C Carrington St, Hilton WA 6163',
+      abn: '62 524 870 529',
+      phone: '(08) 9456 4378',
+      email: 'carbatteryperth@gmail.com',
+      address: '190C Carrington St, Hilton',
       accountName: 'Fremantle Batteries',
       bsb: '036-224',
       accountNumber: '574315',
-      paymentTermsDays: 7,
+      gstRegistered: true,
+      nextInvoiceNumber: 1300,
+      paymentTermsDays: 14,
     },
   },
 ];

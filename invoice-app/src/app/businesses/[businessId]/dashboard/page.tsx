@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Plus, ArrowLeftRight, FileWarning } from 'lucide-react';
+import { Plus, ArrowLeftRight, FileWarning, CheckCircle2 } from 'lucide-react';
 import { getInvoices } from '@/lib/firestore';
 import { getBusinessConfig, formatCurrency } from '@/lib/constants';
 import { Invoice, effectiveStatus } from '@/types';
@@ -118,15 +118,17 @@ export default function DashboardPage() {
         <div className="mt-3 space-y-2.5">
           {!stats && <p className="py-8 text-center text-sm text-slate-400">Loading…</p>}
           {stats && stats.unpaid.length === 0 && (
-            <p className="rounded-xl bg-white py-8 text-center text-sm text-slate-400">
-              Nothing outstanding — nice work 🎉
-            </p>
+            <div className="rounded-2xl border border-slate-100 bg-white/70 py-10 text-center shadow-sm ring-1 ring-slate-100">
+              <CheckCircle2 className="mx-auto mb-2 text-emerald-400" size={34} strokeWidth={1.8} />
+              <p className="text-sm font-semibold text-slate-600">All caught up</p>
+              <p className="mt-0.5 text-xs text-slate-400">Nothing outstanding — nice work.</p>
+            </div>
           )}
           {stats?.unpaid.slice(0, 8).map((inv) => (
             <Link
               key={inv.id}
               href={`/businesses/${businessId}/invoices/${inv.id}`}
-              className="flex items-center gap-3 rounded-xl border border-slate-100 bg-white p-4 shadow-sm active:bg-slate-50"
+              className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm ring-1 ring-slate-100/70 transition active:scale-[0.99] active:bg-slate-50"
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-slate-900">{inv.customerName}</p>

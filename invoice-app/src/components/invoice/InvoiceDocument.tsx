@@ -259,7 +259,7 @@ function CBP({ invoice, business }: Props) {
               }}
             >
               <span style={{ color: '#fff', fontWeight: 800, fontSize: 13, letterSpacing: 0.5 }}>
-                {invoice.status === 'Paid' ? 'TOTAL PAID' : invoice.status === 'Quote' ? 'QUOTE TOTAL' : 'TOTAL DUE'}
+                {invoice.status === 'Quote' ? 'QUOTE TOTAL' : 'TOTAL (INC. GST)'}
               </span>
               <span style={{ color: '#fff', fontWeight: 800, fontSize: 22 }}>{formatCurrency(invoice.total)}</span>
             </div>
@@ -411,7 +411,7 @@ function BFD({ invoice, business }: Props) {
           <div style={{ width: 290 }}>
             <TotalsRows invoice={invoice} gstReg={gstReg} />
             <div style={{ background: '#111113', color: '#fff', display: 'flex', justifyContent: 'space-between', padding: '11px 16px', borderRadius: 8, marginTop: 6 }}>
-              <span style={{ fontWeight: 800 }}>{invoice.status === 'Paid' ? 'Total Paid' : 'Total'}</span>
+              <span style={{ fontWeight: 800 }}>{invoice.status === 'Quote' ? 'Quote Total' : 'Total (inc. GST)'}</span>
               <span style={{ fontWeight: 800, fontSize: 18 }}>{formatCurrency(invoice.total)}</span>
             </div>
             {invoice.status !== 'Quote' && (
@@ -544,9 +544,9 @@ function Fremantle({ invoice, business }: Props) {
             <PaymentBox business={business} invoice={invoice} accent={red} title="EFT PAYMENT DETAILS" />
           </div>
           <div style={{ width: 290 }}>
-            <TotalsRows invoice={invoice} gstReg={gstReg} gstIncludedLabel />
+            <TotalsRows invoice={invoice} gstReg={gstReg} />
             <div style={{ background: red, color: '#fff', display: 'flex', justifyContent: 'space-between', padding: '11px 16px', borderRadius: 8, marginTop: 6 }}>
-              <span style={{ fontWeight: 800 }}>{invoice.status === 'Paid' ? 'TOTAL PAID' : 'TOTAL DUE'}</span>
+              <span style={{ fontWeight: 800 }}>{invoice.status === 'Quote' ? 'QUOTE TOTAL' : 'TOTAL (INC. GST)'}</span>
               <span style={{ fontWeight: 800, fontSize: 18 }}>{formatCurrency(invoice.total)}</span>
             </div>
             {invoice.status !== 'Quote' && (
@@ -581,11 +581,11 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function TotalsRows({ invoice, gstReg, gstIncludedLabel }: { invoice: Invoice; gstReg: boolean; gstIncludedLabel?: boolean }) {
+function TotalsRows({ invoice, gstReg }: { invoice: Invoice; gstReg: boolean }) {
   return (
     <div>
       <Row label={gstReg ? 'Subtotal (ex GST)' : 'Subtotal'} value={formatCurrency(invoice.subtotal)} />
-      {gstReg && <Row label="GST (10%)" value={gstIncludedLabel ? 'Included' : formatCurrency(invoice.gstAmount)} />}
+      {gstReg && <Row label="GST (10%) incl." value={formatCurrency(invoice.gstAmount)} />}
     </div>
   );
 }

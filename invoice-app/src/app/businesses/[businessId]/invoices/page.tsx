@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, FileText } from 'lucide-react';
 import TopBar from '@/components/ui/TopBar';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { getInvoices } from '@/lib/firestore';
@@ -79,15 +79,21 @@ export default function InvoicesPage() {
         <div className="mt-4 space-y-2.5">
           {!filtered && <p className="py-10 text-center text-sm text-slate-400">Loading…</p>}
           {filtered && filtered.length === 0 && (
-            <p className="rounded-xl bg-white py-10 text-center text-sm text-slate-400">
-              {invoices?.length === 0 ? 'No invoices yet. Tap + to create one.' : 'No matches.'}
-            </p>
+            <div className="rounded-2xl border border-slate-100 bg-white/70 py-12 text-center shadow-sm ring-1 ring-slate-100">
+              <FileText className="mx-auto mb-2 text-slate-300" size={34} strokeWidth={1.6} />
+              <p className="text-sm font-semibold text-slate-600">
+                {invoices?.length === 0 ? 'No invoices yet' : 'No matches'}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-400">
+                {invoices?.length === 0 ? 'Tap + to create your first one.' : 'Try a different search.'}
+              </p>
+            </div>
           )}
           {filtered?.map((inv) => (
             <Link
               key={inv.id}
               href={`/businesses/${businessId}/invoices/${inv.id}`}
-              className="flex items-center gap-3 rounded-xl border border-slate-100 bg-white p-4 shadow-sm active:bg-slate-50"
+              className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm ring-1 ring-slate-100/70 transition active:scale-[0.99] active:bg-slate-50"
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-slate-900">{inv.customerName}</p>

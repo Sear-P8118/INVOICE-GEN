@@ -19,7 +19,13 @@ function HomeInner() {
   const { signOut } = useAuth();
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-2xl flex-col bg-slate-950 px-5 pb-safe">
+    <div
+      className="mx-auto flex min-h-dvh max-w-2xl flex-col px-5 pb-safe"
+      style={{
+        background:
+          'radial-gradient(900px 520px at 100% 0%, rgba(59,130,246,0.18), transparent 55%), radial-gradient(700px 500px at 0% 100%, rgba(99,102,241,0.14), transparent 55%), #060a14',
+      }}
+    >
       <header className="flex items-center justify-between pb-2 pt-14">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
