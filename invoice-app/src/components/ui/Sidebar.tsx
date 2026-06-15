@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, FileText, Users, Package, BarChart3, Settings, ArrowLeftRight, LogOut } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, FileText, Users, Package, BarChart3, Settings, ArrowLeftRight, LogOut } from 'lucide-react';
 import { getBusinessConfig } from '@/lib/constants';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -17,6 +17,7 @@ export default function Sidebar({ businessId }: { businessId: string }) {
   const base = `/businesses/${businessId}`;
   const items = [
     { href: `${base}/dashboard`, label: 'Dashboard', icon: LayoutDashboard },
+    { href: `${base}/jobs`, label: 'Job Log', icon: ClipboardList },
     { href: `${base}/invoices`, label: 'Invoices', icon: FileText },
     { href: `${base}/customers`, label: 'Customers', icon: Users },
     { href: `${base}/items`, label: 'Saved items', icon: Package },

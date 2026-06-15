@@ -12,7 +12,7 @@ import {
   runTransaction,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Business, Customer, Invoice, LineItem, SavedItem, normalizeStatus } from '@/types';
+import { Business, Customer, Invoice, Job, LineItem, SavedItem, normalizeStatus } from '@/types';
 import { GST_RATE, getBusinessConfig } from './constants';
 
 // ---------- Business settings ----------
@@ -167,6 +167,79 @@ export async function convertQuoteToInvoice(quote: Invoice): Promise<string> {
 
 export async function deleteInvoice(id: string): Promise<void> {
   await deleteDoc(doc(db(), 'invoices', id));
+}
+
+// ---------- Job Log ----------
+
+export async function getJobs(businessId: string): Promise<Job[]> {
+  const q = query(collection(db(), 'jobs'), where('businessId', '==', businessId));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => ({ ...d.data(), id: d.id } as Job))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function saveJob(job: Omit<Job, 'id' | 'createdAt'> & { id?: string }): Promise<string> {
+  const now = new Date().toISOString();
+  const { id, ...data } = job;
+  if (id) {
+    await updateDoc(doc(db(), 'jobs', id), { ...data, updatedAt: now });
+    return id;
+  }
+  const ref = await addDoc(collection(db(), 'jobs'), { ...data, createdAt: now, updatedAt: now });
+  return ref.id;
+}
+
+export async function deleteJob(id: string): Promise<void> {
+  await deleteDoc(doc(db(), 'jobs', id));
+}
+
+// Creates an invoice from a logged job and links them. Paid jobs become Paid
+// invoices; owing jobs become Pending with a due date.
+export async function convertJobToInvoice(job: Job): Promise<string> {
+  if (job.invoiceId) return job.invoiceId; // already invoiced — never duplicate
+  const business = await getBusiness(job.businessId);
+  const inclusive = getBusinessConfig(job.businessId)?.pdf.gstInclusive ?? false;
+  const invoiceNumber = await claimNextInvoiceNumber(job.businessId);
+  const now = new Date().toISOString();
+  const issueDate = now.slice(0, 10);
+  const items: LineItem[] = [
+    { id: crypto.randomUUID(), description: job.description, quantity: 1, unitPrice: job.amount },
+  ];
+  const totals = calcTotals(items, business.gstRegistered, inclusive);
+  const isPaid = job.paymentStatus === 'Paid';
+
+  let dueDate = '';
+  if (!isPaid) {
+    if (job.dueDate) dueDate = job.dueDate;
+    else {
+      const d = new Date();
+      d.setDate(d.getDate() + (business.paymentTermsDays || 14));
+      dueDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+  }
+  const notes = [job.notes, job.rego ? `Rego: ${job.rego}` : ''].filter(Boolean).join('\n');
+
+  const ref = await addDoc(collection(db(), 'invoices'), {
+    invoiceNumber,
+    businessId: job.businessId,
+    customerId: '',
+    customerName: job.customerName,
+    customerEmail: job.customerEmail || '',
+    customerPhone: job.customerPhone,
+    customerAddress: job.location || '',
+    issueDate,
+    dueDate,
+    lineItems: items,
+    gstRegistered: business.gstRegistered,
+    ...totals,
+    status: isPaid ? 'Paid' : 'Pending',
+    notes,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await updateDoc(doc(db(), 'jobs', job.id), { invoiceId: ref.id, updatedAt: now });
+  return ref.id;
 }
 
 // Atomically claims the next invoice number for a business so two

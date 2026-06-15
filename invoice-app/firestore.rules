@@ -23,5 +23,9 @@ service cloud.firestore {
     match /invoices/{invoiceId} {
       allow read, write: if isOwner();
     }
+
+    match /jobs/{jobId} {
+      allow read, write: if isOwner();
+    }
   }
 }

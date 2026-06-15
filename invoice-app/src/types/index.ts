@@ -5,6 +5,27 @@ export interface SavedItem {
   unitPrice: number;
 }
 
+// A fast end-of-job note Dad logs now and invoices later.
+export interface Job {
+  id: string;
+  businessId: string;
+  customerName: string;
+  customerPhone: string;
+  description: string; // what was sold / work done
+  amount: number; // total (GST-inclusive, like the invoices)
+  paymentStatus: 'Paid' | 'Owing';
+  // optional
+  customerEmail?: string;
+  rego?: string;
+  location?: string;
+  dueDate?: string;
+  notes?: string;
+  // system
+  createdAt: string; // when the job was logged
+  updatedAt?: string;
+  invoiceId?: string; // set once an invoice has been created from this job
+}
+
 export interface Business {
   id: string;
   name: string;

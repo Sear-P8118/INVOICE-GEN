@@ -4,11 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Plus, ArrowLeftRight, FileWarning, CheckCircle2 } from 'lucide-react';
-import { getInvoices } from '@/lib/firestore';
+import { Plus, ArrowLeftRight, FileWarning, CheckCircle2, ClipboardList } from 'lucide-react';
+import { getInvoices, getJobs } from '@/lib/firestore';
 import { getBusinessConfig, formatCurrency } from '@/lib/constants';
 import { Invoice, effectiveStatus } from '@/types';
 import StatusBadge from '@/components/ui/StatusBadge';
+import QuickJobSheet from '@/components/job/QuickJobSheet';
 import { parseISO, startOfMonth } from 'date-fns';
 
 export default function DashboardPage() {
@@ -16,10 +17,19 @@ export default function DashboardPage() {
   const router = useRouter();
   const config = getBusinessConfig(businessId)!;
   const [invoices, setInvoices] = useState<Invoice[] | null>(null);
+  const [jobsNeeded, setJobsNeeded] = useState<number | null>(null);
+  const [quickOpen, setQuickOpen] = useState(false);
 
   useEffect(() => {
     getInvoices(businessId).then(setInvoices).catch(() => setInvoices([]));
   }, [businessId]);
+
+  function reloadJobs() {
+    getJobs(businessId)
+      .then((j) => setJobsNeeded(j.filter((x) => !x.invoiceId).length))
+      .catch(() => setJobsNeeded(0));
+  }
+  useEffect(reloadJobs, [businessId]);
 
   const stats = useMemo(() => {
     if (!invoices) return null;
@@ -91,24 +101,42 @@ export default function DashboardPage() {
 
       <div className="px-5 py-5">
         <button
+          onClick={() => setQuickOpen(true)}
+          className={`flex w-full items-center justify-center gap-2 rounded-2xl ${config.ui.accent} py-5 text-lg font-bold text-white shadow-md transition-transform active:scale-[0.98]`}
+        >
+          <Plus size={22} strokeWidth={2.6} />
+          Quick Job
+        </button>
+
+        {jobsNeeded !== null && jobsNeeded > 0 && (
+          <Link
+            href={`/businesses/${businessId}/jobs`}
+            className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 active:bg-amber-100"
+          >
+            <span className="flex items-center gap-2">
+              <ClipboardList size={18} />
+              {jobsNeeded} job{jobsNeeded === 1 ? '' : 's'} need{jobsNeeded === 1 ? 's' : ''} invoices
+            </span>
+            <span aria-hidden>→</span>
+          </Link>
+        )}
+
+        <button
           onClick={() => router.push(`/businesses/${businessId}/invoices/new`)}
-          className={`flex w-full items-center justify-center gap-2 rounded-2xl ${config.ui.accent} py-4 text-base font-bold text-white shadow-md transition-transform active:scale-[0.98]`}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white py-3.5 text-base font-semibold text-slate-700 shadow-sm active:bg-slate-50"
         >
           <Plus size={20} strokeWidth={2.5} />
           New Invoice
         </button>
 
-        <div className="mt-3 grid grid-cols-2 gap-3 lg:hidden">
-          <Link
-            href={`/businesses/${businessId}/items`}
-            className="rounded-2xl border border-slate-200 bg-white py-3 text-center text-sm font-semibold text-slate-700 shadow-sm active:bg-slate-50"
-          >
+        <div className="mt-3 grid grid-cols-3 gap-2 lg:hidden">
+          <Link href={`/businesses/${businessId}/jobs`} className="rounded-2xl border border-slate-200 bg-white py-3 text-center text-sm font-semibold text-slate-700 shadow-sm active:bg-slate-50">
+            Job Log
+          </Link>
+          <Link href={`/businesses/${businessId}/items`} className="rounded-2xl border border-slate-200 bg-white py-3 text-center text-sm font-semibold text-slate-700 shadow-sm active:bg-slate-50">
             Saved items
           </Link>
-          <Link
-            href={`/businesses/${businessId}/reports`}
-            className="rounded-2xl border border-slate-200 bg-white py-3 text-center text-sm font-semibold text-slate-700 shadow-sm active:bg-slate-50"
-          >
+          <Link href={`/businesses/${businessId}/reports`} className="rounded-2xl border border-slate-200 bg-white py-3 text-center text-sm font-semibold text-slate-700 shadow-sm active:bg-slate-50">
             Reports
           </Link>
         </div>
@@ -157,6 +185,10 @@ export default function DashboardPage() {
           ))}
         </div>
       </div>
+
+      {quickOpen && (
+        <QuickJobSheet businessId={businessId} onClose={() => setQuickOpen(false)} onSaved={reloadJobs} />
+      )}
     </div>
   );
 }
