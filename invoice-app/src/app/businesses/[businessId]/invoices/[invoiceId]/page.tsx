@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Share2, Download, Pencil, Copy, Trash2 } from 'lucide-react';
+import { Share2, Download, Pencil, Copy, Trash2, Mail } from 'lucide-react';
 import TopBar from '@/components/ui/TopBar';
 import Button from '@/components/ui/Button';
 import Sheet from '@/components/ui/Sheet';
+import { Input, Textarea } from '@/components/ui/Field';
 import ScaledInvoice from '@/components/invoice/ScaledInvoice';
 import { getBusiness, getInvoice, updateInvoiceStatus, deleteInvoice } from '@/lib/firestore';
-import { downloadInvoicePDF, shareInvoicePDF } from '@/lib/pdf';
+import { downloadInvoicePDF, shareInvoicePDF, invoicePdfBase64 } from '@/lib/pdf';
 import { getBusinessConfig } from '@/lib/constants';
+import { auth } from '@/lib/firebase';
 import { Business, Invoice, InvoiceStatus, INVOICE_STATUSES } from '@/types';
 
 export default function InvoiceDetailPage() {
@@ -20,6 +22,12 @@ export default function InvoiceDetailPage() {
   const [business, setBusiness] = useState<Business | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Email
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState('');
+  const [emailMsg, setEmailMsg] = useState('');
+  const [emailState, setEmailState] = useState<'idle' | 'sending' | 'sent' | string>('idle');
 
   useEffect(() => {
     getInvoice(invoiceId).then(setInvoice);
@@ -37,6 +45,48 @@ export default function InvoiceDetailPage() {
     setBusy(true);
     await deleteInvoice(invoice.id);
     router.replace(`/businesses/${businessId}/invoices`);
+  }
+
+  function openEmail() {
+    if (!invoice) return;
+    setEmailTo(invoice.customerEmail || '');
+    setEmailMsg('');
+    setEmailState('idle');
+    setEmailOpen(true);
+  }
+
+  async function sendEmail() {
+    if (!invoice || !business) return;
+    if (!emailTo.trim()) {
+      setEmailState('Enter a recipient email.');
+      return;
+    }
+    setEmailState('sending');
+    try {
+      const token = await auth().currentUser?.getIdToken();
+      const pdfBase64 = await invoicePdfBase64(invoice, business);
+      const res = await fetch('/api/send-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? ''}` },
+        body: JSON.stringify({
+          to: emailTo.trim(),
+          businessName: business.name,
+          invoiceNumber: invoice.invoiceNumber,
+          docLabel: invoice.status === 'Quote' ? 'Quote' : invoice.gstRegistered ? 'Tax Invoice' : 'Invoice',
+          pdfBase64,
+          replyTo: business.email || undefined,
+          message: emailMsg.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setEmailState(data.error || 'Could not send the email.');
+        return;
+      }
+      setEmailState('sent');
+    } catch {
+      setEmailState('Could not send. Check your connection and try again.');
+    }
   }
 
   if (invoice === undefined) {
@@ -103,28 +153,70 @@ export default function InvoiceDetailPage() {
         </div>
 
         {/* Actions */}
-        <div className="grid grid-cols-2 gap-3 pt-1">
-          <Button
-            onClick={() => business && shareInvoicePDF(invoice, business)}
-            disabled={!business}
-            className={`${config.ui.accent} text-white`}
-          >
-            <Share2 size={18} /> Share PDF
+        <div className="space-y-3 pt-1">
+          <Button full onClick={openEmail} disabled={!business} className={`min-h-12 ${config.ui.accent} text-white`}>
+            <Mail size={18} /> Email to customer
           </Button>
-          <Button variant="secondary" onClick={() => business && downloadInvoicePDF(invoice, business)} disabled={!business}>
-            <Download size={18} /> Download
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => router.push(`/businesses/${businessId}/invoices/new?duplicate=${invoice.id}`)}
-          >
-            <Copy size={18} /> Duplicate
-          </Button>
-          <Button variant="danger" onClick={() => setConfirmDelete(true)}>
-            <Trash2 size={18} /> Delete
-          </Button>
+          <div className="grid grid-cols-2 gap-3">
+            <Button variant="secondary" onClick={() => business && shareInvoicePDF(invoice, business)} disabled={!business}>
+              <Share2 size={18} /> Share
+            </Button>
+            <Button variant="secondary" onClick={() => business && downloadInvoicePDF(invoice, business)} disabled={!business}>
+              <Download size={18} /> Download
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => router.push(`/businesses/${businessId}/invoices/new?duplicate=${invoice.id}`)}
+            >
+              <Copy size={18} /> Duplicate
+            </Button>
+            <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+              <Trash2 size={18} /> Delete
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* Email sheet */}
+      <Sheet open={emailOpen} onClose={() => setEmailOpen(false)} title="Email invoice">
+        {emailState === 'sent' ? (
+          <div className="py-4 text-center">
+            <Mail className="mx-auto mb-2 text-emerald-500" size={32} />
+            <p className="font-semibold text-slate-900">Sent to {emailTo}</p>
+            <p className="mt-1 text-sm text-slate-500">The customer has the PDF in their inbox.</p>
+            <Button full className="mt-5" onClick={() => setEmailOpen(false)}>
+              Done
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <Input
+              label="Send to"
+              type="email"
+              inputMode="email"
+              placeholder="customer@email.com"
+              value={emailTo}
+              onChange={(e) => setEmailTo(e.target.value)}
+            />
+            <Textarea
+              label="Message (optional)"
+              rows={3}
+              placeholder="Leave blank to use the default message."
+              value={emailMsg}
+              onChange={(e) => setEmailMsg(e.target.value)}
+            />
+            <p className="text-xs text-slate-400">
+              Sends {invoice.invoiceNumber} as a PDF from {business?.name}. Replies go to {business?.email || 'your business email'}.
+            </p>
+            {typeof emailState === 'string' && emailState !== 'idle' && emailState !== 'sending' && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{emailState}</p>
+            )}
+            <Button full onClick={sendEmail} disabled={emailState === 'sending'} className={`${config.ui.accent} text-white`}>
+              {emailState === 'sending' ? 'Sending…' : 'Send email'}
+            </Button>
+          </div>
+        )}
+      </Sheet>
 
       <Sheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete invoice?">
         <p className="text-sm text-slate-600">

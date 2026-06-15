@@ -53,6 +53,13 @@ export async function downloadInvoicePDF(invoice: Invoice, business: Business): 
   doc.save(`${invoice.invoiceNumber}.pdf`);
 }
 
+// Base64 (no data-URI prefix) for emailing the PDF as an attachment.
+export async function invoicePdfBase64(invoice: Invoice, business: Business): Promise<string> {
+  const doc = await buildInvoicePDF(invoice, business);
+  const uri = doc.output('datauristring');
+  return uri.substring(uri.indexOf(',') + 1);
+}
+
 // Uses the native share sheet on phones (AirDrop, SMS, email, WhatsApp…).
 // Falls back to a normal download on desktop browsers.
 export async function shareInvoicePDF(invoice: Invoice, business: Business): Promise<void> {
