@@ -20,7 +20,7 @@ function HomeInner() {
 
   return (
     <div
-      className="mx-auto flex min-h-dvh max-w-2xl flex-col px-5 pb-safe"
+      className="mx-auto flex min-h-dvh max-w-2xl flex-col px-5 pb-safe lg:max-w-5xl"
       style={{
         background:
           'radial-gradient(900px 520px at 100% 0%, rgba(59,130,246,0.18), transparent 55%), radial-gradient(700px 500px at 0% 100%, rgba(99,102,241,0.14), transparent 55%), #060a14',
@@ -44,12 +44,12 @@ function HomeInner() {
         </button>
       </header>
 
-      <div className="mt-8 flex flex-col gap-4">
+      <div className="mt-8 grid gap-4 lg:grid-cols-3">
         {BUSINESSES.map((biz) => (
           <Link
             key={biz.id}
             href={`/businesses/${biz.id}/dashboard`}
-            className="group overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-xl shadow-black/30 transition-transform active:scale-[0.98]"
+            className="group overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-xl shadow-black/30 transition-transform hover:-translate-y-0.5 active:scale-[0.98]"
           >
             <div
               className="flex h-28 items-center justify-center px-6"

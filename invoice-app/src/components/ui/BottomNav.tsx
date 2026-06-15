@@ -16,7 +16,7 @@ export default function BottomNav({ businessId }: { businessId: string }) {
   ];
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white pb-safe">
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white pb-safe lg:hidden">
       <div className="mx-auto flex max-w-2xl">
         {items.map(({ href, label, icon: Icon }) => {
           const active = pathname.startsWith(href);

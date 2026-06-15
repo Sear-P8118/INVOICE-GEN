@@ -122,57 +122,62 @@ export default function InvoiceDetailPage() {
         }
       />
 
-      <div className="space-y-4 px-4 py-4">
-        {/* Live preview of the exact PDF that will be shared/downloaded */}
-        {business ? (
-          <ScaledInvoice invoice={invoice} business={business} />
-        ) : (
-          <div className="flex h-64 items-center justify-center rounded-2xl bg-white text-sm text-slate-400 shadow-sm">
-            Loading preview…
-          </div>
-        )}
+      <div className="px-4 py-4">
+        <div className="space-y-4 lg:grid lg:grid-cols-[1fr_320px] lg:items-start lg:gap-6 lg:space-y-0">
+          {/* Live preview of the exact PDF that will be shared/downloaded */}
+          {business ? (
+            <ScaledInvoice invoice={invoice} business={business} />
+          ) : (
+            <div className="flex h-64 items-center justify-center rounded-2xl bg-white text-sm text-slate-400 shadow-sm">
+              Loading preview…
+            </div>
+          )}
 
-        {/* Status switcher */}
-        <div>
-          <p className="mb-2 text-sm font-medium text-slate-700">Status</p>
-          <div className="grid grid-cols-4 gap-2">
-            {INVOICE_STATUSES.map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatus(s)}
-                className={`rounded-xl py-2.5 text-sm font-semibold ${
-                  invoice.status === s
-                    ? 'bg-slate-900 text-white'
-                    : 'border border-slate-200 bg-white text-slate-600'
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
+          {/* Controls (sticky rail on desktop) */}
+          <div className="space-y-4 lg:sticky lg:top-20">
+            {/* Status switcher */}
+            <div>
+              <p className="mb-2 text-sm font-medium text-slate-700">Status</p>
+              <div className="grid grid-cols-4 gap-2 lg:grid-cols-2">
+                {INVOICE_STATUSES.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setStatus(s)}
+                    className={`rounded-xl py-2.5 text-sm font-semibold ${
+                      invoice.status === s
+                        ? 'bg-slate-900 text-white'
+                        : 'border border-slate-200 bg-white text-slate-600'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {/* Actions */}
-        <div className="space-y-3 pt-1">
-          <Button full onClick={openEmail} disabled={!business} className={`min-h-12 ${config.ui.accent} text-white`}>
-            <Mail size={18} /> Email to customer
-          </Button>
-          <div className="grid grid-cols-2 gap-3">
-            <Button variant="secondary" onClick={() => business && shareInvoicePDF(invoice, business)} disabled={!business}>
-              <Share2 size={18} /> Share
-            </Button>
-            <Button variant="secondary" onClick={() => business && downloadInvoicePDF(invoice, business)} disabled={!business}>
-              <Download size={18} /> Download
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => router.push(`/businesses/${businessId}/invoices/new?duplicate=${invoice.id}`)}
-            >
-              <Copy size={18} /> Duplicate
-            </Button>
-            <Button variant="danger" onClick={() => setConfirmDelete(true)}>
-              <Trash2 size={18} /> Delete
-            </Button>
+            {/* Actions */}
+            <div className="space-y-3 pt-1">
+              <Button full onClick={openEmail} disabled={!business} className={`min-h-12 ${config.ui.accent} text-white`}>
+                <Mail size={18} /> Email to customer
+              </Button>
+              <div className="grid grid-cols-2 gap-3">
+                <Button variant="secondary" onClick={() => business && shareInvoicePDF(invoice, business)} disabled={!business}>
+                  <Share2 size={18} /> Share
+                </Button>
+                <Button variant="secondary" onClick={() => business && downloadInvoicePDF(invoice, business)} disabled={!business}>
+                  <Download size={18} /> Download
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => router.push(`/businesses/${businessId}/invoices/new?duplicate=${invoice.id}`)}
+                >
+                  <Copy size={18} /> Duplicate
+                </Button>
+                <Button variant="danger" onClick={() => setConfirmDelete(true)}>
+                  <Trash2 size={18} /> Delete
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

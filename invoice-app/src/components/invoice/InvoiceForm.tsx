@@ -257,7 +257,7 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
   }
 
   return (
-    <div className="space-y-6 px-4 py-4">
+    <div className="mx-auto max-w-2xl space-y-6 px-4 py-4">
       {/* Document type */}
       <section>
         <Label>Type</Label>
