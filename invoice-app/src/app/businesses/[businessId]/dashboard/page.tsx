@@ -51,6 +51,20 @@ export default function DashboardPage() {
   return (
     <div>
       <header className={`bg-gradient-to-br ${config.ui.gradient} px-5 pb-6 pt-12 text-white`}>
+        <div className="mb-5">
+          <p className="text-xl font-extrabold leading-tight">Welcome back, Sami 👋</p>
+          <p className="mt-0.5 text-sm text-white/75">
+            {jobsNeeded && jobsNeeded > 0
+              ? `You have ${jobsNeeded} job${jobsNeeded === 1 ? '' : 's'} waiting to be invoiced.`
+              : stats && stats.overdue.length > 0
+                ? `${stats.overdue.length} invoice${stats.overdue.length === 1 ? '' : 's'} overdue — worth a follow-up.`
+                : stats && stats.unpaid.length > 0
+                  ? `${stats.unpaid.length} invoice${stats.unpaid.length === 1 ? '' : 's'} awaiting payment.`
+                  : stats
+                    ? 'Everything is up to date. 🎯'
+                    : 'Here’s what’s happening today.'}
+          </p>
+        </div>
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <span

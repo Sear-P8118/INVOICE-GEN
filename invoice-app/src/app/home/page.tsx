@@ -4,12 +4,14 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { LogOut, ChevronRight } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
+import BirthdayGate from '@/components/BirthdayGate';
 import { BUSINESSES } from '@/lib/constants';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function HomePage() {
   return (
     <AuthGuard>
+      <BirthdayGate />
       <HomeInner />
     </AuthGuard>
   );

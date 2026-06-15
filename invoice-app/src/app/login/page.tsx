@@ -38,6 +38,12 @@ export default function LoginPage() {
     setBusy(true);
     try {
       await signIn(resolveLogin(login), password);
+      // Re-arm the birthday screen so a fresh login shows it again (within the window).
+      try {
+        sessionStorage.removeItem('bdayShown');
+      } catch {
+        /* ignore */
+      }
       router.replace('/home');
     } catch (err) {
       setError((err as Error).message);

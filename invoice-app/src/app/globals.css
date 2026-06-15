@@ -20,3 +20,36 @@ body {
 }
 
 /* The app is always light — invoices are paper-white documents. */
+
+/* ---------- Birthday celebration ---------- */
+@keyframes bday-pop {
+  0% { opacity: 0; transform: translateY(14px) scale(0.96); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes bday-fade {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes bday-fall {
+  0% { transform: translate3d(0, -12vh, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate3d(var(--drift, 0), 112vh, 0) rotate(720deg); opacity: 0.85; }
+}
+@keyframes bday-glow {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.08); }
+}
+.bday-overlay { animation: bday-fade 0.35s ease-out both; }
+.bday-card { animation: bday-pop 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.bday-glow { animation: bday-glow 5s ease-in-out infinite; }
+.bday-confetti-piece {
+  position: absolute;
+  top: 0;
+  will-change: transform;
+  animation: bday-fall linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bday-overlay, .bday-card { animation: none; }
+  .bday-glow { animation: none; opacity: 0.6; }
+  .bday-confetti-piece { display: none !important; }
+}
