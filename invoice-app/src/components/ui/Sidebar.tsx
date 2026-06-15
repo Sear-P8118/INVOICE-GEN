@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, FileText, Users, Package, Settings, ArrowLeftRight, LogOut } from 'lucide-react';
+import { LayoutDashboard, FileText, Users, Package, BarChart3, Settings, ArrowLeftRight, LogOut } from 'lucide-react';
 import { getBusinessConfig } from '@/lib/constants';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -20,6 +20,7 @@ export default function Sidebar({ businessId }: { businessId: string }) {
     { href: `${base}/invoices`, label: 'Invoices', icon: FileText },
     { href: `${base}/customers`, label: 'Customers', icon: Users },
     { href: `${base}/items`, label: 'Saved items', icon: Package },
+    { href: `${base}/reports`, label: 'Reports', icon: BarChart3 },
     { href: `${base}/settings`, label: 'Settings', icon: Settings },
   ];
 

@@ -98,6 +98,21 @@ export default function DashboardPage() {
           New Invoice
         </button>
 
+        <div className="mt-3 grid grid-cols-2 gap-3 lg:hidden">
+          <Link
+            href={`/businesses/${businessId}/items`}
+            className="rounded-2xl border border-slate-200 bg-white py-3 text-center text-sm font-semibold text-slate-700 shadow-sm active:bg-slate-50"
+          >
+            Saved items
+          </Link>
+          <Link
+            href={`/businesses/${businessId}/reports`}
+            className="rounded-2xl border border-slate-200 bg-white py-3 text-center text-sm font-semibold text-slate-700 shadow-sm active:bg-slate-50"
+          >
+            Reports
+          </Link>
+        </div>
+
         {stats && stats.overdue.length > 0 && (
           <div className="mt-4 flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
             <FileWarning size={18} />

@@ -130,6 +130,41 @@ export async function updateInvoiceStatus(id: string, status: Invoice['status'])
   await updateDoc(doc(db(), 'invoices', id), { status, updatedAt: new Date().toISOString() });
 }
 
+// Creates a new Pending invoice from a quote, keeping the quote intact, and
+// records the link back on the quote so we can warn about re-converting.
+export async function convertQuoteToInvoice(quote: Invoice): Promise<string> {
+  const business = await getBusiness(quote.businessId);
+  const invoiceNumber = await claimNextInvoiceNumber(quote.businessId);
+  const now = new Date().toISOString();
+  const issueDate = now.slice(0, 10);
+  const due = new Date();
+  due.setDate(due.getDate() + (business.paymentTermsDays || 14));
+  const dueDate = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`;
+
+  const ref = await addDoc(collection(db(), 'invoices'), {
+    invoiceNumber,
+    businessId: quote.businessId,
+    customerId: quote.customerId,
+    customerName: quote.customerName,
+    customerEmail: quote.customerEmail,
+    customerPhone: quote.customerPhone,
+    customerAddress: quote.customerAddress,
+    issueDate,
+    dueDate,
+    lineItems: quote.lineItems,
+    gstRegistered: quote.gstRegistered,
+    subtotal: quote.subtotal,
+    gstAmount: quote.gstAmount,
+    total: quote.total,
+    status: 'Pending',
+    notes: quote.notes,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await updateDoc(doc(db(), 'invoices', quote.id), { convertedInvoiceId: ref.id, updatedAt: now });
+  return ref.id;
+}
+
 export async function deleteInvoice(id: string): Promise<void> {
   await deleteDoc(doc(db(), 'invoices', id));
 }

@@ -101,4 +101,5 @@ export interface Invoice {
   notes: string;
   createdAt: string;
   updatedAt: string;
+  convertedInvoiceId?: string; // set on a Quote once it has been converted to an invoice
 }

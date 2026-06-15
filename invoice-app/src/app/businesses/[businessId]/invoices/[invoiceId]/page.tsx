@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Share2, Download, Pencil, Copy, Trash2, Mail } from 'lucide-react';
+import { Share2, Download, Pencil, Copy, Trash2, Mail, FileCheck2 } from 'lucide-react';
 import TopBar from '@/components/ui/TopBar';
 import Button from '@/components/ui/Button';
 import Sheet from '@/components/ui/Sheet';
 import { Input, Textarea } from '@/components/ui/Field';
 import ScaledInvoice from '@/components/invoice/ScaledInvoice';
-import { getBusiness, getInvoice, updateInvoiceStatus, deleteInvoice } from '@/lib/firestore';
+import { getBusiness, getInvoice, updateInvoiceStatus, deleteInvoice, convertQuoteToInvoice } from '@/lib/firestore';
 import { downloadInvoicePDF, shareInvoicePDF, invoicePdfBase64 } from '@/lib/pdf';
 import { getBusinessConfig } from '@/lib/constants';
 import { auth } from '@/lib/firebase';
@@ -22,6 +22,10 @@ export default function InvoiceDetailPage() {
   const [business, setBusiness] = useState<Business | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Quote → invoice
+  const [converting, setConverting] = useState(false);
+  const [convertWarn, setConvertWarn] = useState(false);
 
   // Email
   const [emailOpen, setEmailOpen] = useState(false);
@@ -45,6 +49,24 @@ export default function InvoiceDetailPage() {
     setBusy(true);
     await deleteInvoice(invoice.id);
     router.replace(`/businesses/${businessId}/invoices`);
+  }
+
+  async function doConvert() {
+    if (!invoice) return;
+    setConvertWarn(false);
+    setConverting(true);
+    try {
+      const newId = await convertQuoteToInvoice(invoice);
+      router.replace(`/businesses/${businessId}/invoices/${newId}`);
+    } catch {
+      setConverting(false);
+    }
+  }
+
+  function handleConvert() {
+    if (!invoice) return;
+    if (invoice.convertedInvoiceId) setConvertWarn(true);
+    else doConvert();
   }
 
   function openEmail() {
@@ -157,6 +179,17 @@ export default function InvoiceDetailPage() {
 
             {/* Actions */}
             <div className="space-y-3 pt-1">
+              {invoice.status === 'Quote' && (
+                <Button
+                  full
+                  onClick={handleConvert}
+                  disabled={converting}
+                  className="min-h-12 bg-emerald-600 text-white active:bg-emerald-700"
+                >
+                  <FileCheck2 size={18} />{' '}
+                  {converting ? 'Converting…' : invoice.convertedInvoiceId ? 'Convert to invoice again' : 'Convert to invoice'}
+                </Button>
+              )}
               <Button full onClick={openEmail} disabled={!business} className={`min-h-12 ${config.ui.accent} text-white`}>
                 <Mail size={18} /> Email to customer
               </Button>
@@ -181,6 +214,31 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Re-convert warning */}
+      <Sheet open={convertWarn} onClose={() => setConvertWarn(false)} title="Already converted">
+        <p className="text-sm text-slate-600">
+          This quote has already been converted to an invoice. Converting again creates another, separate invoice with a
+          new number.
+        </p>
+        <div className="mt-5 space-y-2">
+          {invoice.convertedInvoiceId && (
+            <Button
+              full
+              variant="secondary"
+              onClick={() => router.replace(`/businesses/${businessId}/invoices/${invoice.convertedInvoiceId}`)}
+            >
+              Open the existing invoice
+            </Button>
+          )}
+          <Button full onClick={doConvert} disabled={converting} className="bg-emerald-600 text-white">
+            {converting ? 'Converting…' : 'Convert again'}
+          </Button>
+          <Button full variant="ghost" onClick={() => setConvertWarn(false)}>
+            Cancel
+          </Button>
+        </div>
+      </Sheet>
 
       {/* Email sheet */}
       <Sheet open={emailOpen} onClose={() => setEmailOpen(false)} title="Email invoice">
