@@ -45,7 +45,7 @@ body {
   position: absolute;
   top: 0;
   will-change: transform;
-  animation: bday-fall linear infinite;
+  /* the full animation (incl. duration) is set inline per piece */
 }
 
 @media (prefers-reduced-motion: reduce) {

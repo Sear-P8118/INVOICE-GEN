@@ -54,8 +54,7 @@ export default function BirthdayScreen({ onContinue }: { onContinue: () => void 
               height: p.size,
               background: p.color,
               borderRadius: p.rounded ? '50%' : '2px',
-              animationDuration: `${p.duration}s`,
-              animationDelay: `${p.delay}s`,
+              animation: `bday-fall ${p.duration}s linear ${p.delay}s infinite`,
               ['--drift' as string]: `${p.drift}px`,
             }}
           />
