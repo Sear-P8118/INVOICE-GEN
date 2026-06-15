@@ -2,16 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { Share2, Download, Pencil, Copy, Trash2 } from 'lucide-react';
 import TopBar from '@/components/ui/TopBar';
-import StatusBadge from '@/components/ui/StatusBadge';
 import Button from '@/components/ui/Button';
 import Sheet from '@/components/ui/Sheet';
+import ScaledInvoice from '@/components/invoice/ScaledInvoice';
 import { getBusiness, getInvoice, updateInvoiceStatus, deleteInvoice } from '@/lib/firestore';
 import { downloadInvoicePDF, shareInvoicePDF } from '@/lib/pdf';
-import { formatCurrency, getBusinessConfig } from '@/lib/constants';
-import { Business, Invoice, InvoiceStatus, INVOICE_STATUSES, effectiveStatus, daysOverdue } from '@/types';
+import { getBusinessConfig } from '@/lib/constants';
+import { Business, Invoice, InvoiceStatus, INVOICE_STATUSES } from '@/types';
 
 export default function InvoiceDetailPage() {
   const { businessId, invoiceId } = useParams<{ businessId: string; invoiceId: string }>();
@@ -57,17 +56,6 @@ export default function InvoiceDetailPage() {
     );
   }
 
-  const isQuote = invoice.status === 'Quote';
-  const showDue = invoice.status === 'Pending' || invoice.status === 'Overdue';
-  const docLabel = isQuote ? 'QUOTE' : invoice.gstRegistered ? 'TAX INVOICE' : 'INVOICE';
-  const leftDateLabel = isQuote ? 'Dated' : invoice.status === 'Paid' ? 'Paid' : 'Issued';
-  const totalLabel =
-    invoice.status === 'Paid' ? 'Total paid' : isQuote ? 'Quote total' : 'Total due';
-  const overdueDays = invoice.status === 'Overdue' ? daysOverdue(invoice.dueDate) : 0;
-  const accentHex = `rgb(${config.pdf.accent.join(',')})`;
-  const bandHex = `rgb(${config.pdf.band.join(',')})`;
-  const bandIsLight = false; // all three templates now use a coloured header band
-
   return (
     <div>
       <TopBar
@@ -85,157 +73,14 @@ export default function InvoiceDetailPage() {
       />
 
       <div className="space-y-4 px-4 py-4">
-        {/* Document preview — mirrors the branded PDF */}
-        <div className="overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-slate-200">
-          {/* Brand header */}
-          <div
-            className="flex items-center justify-between gap-3 px-5 py-4"
-            style={{ backgroundColor: bandIsLight ? '#ffffff' : bandHex }}
-          >
-            <span
-              className="flex h-12 w-[4.5rem] shrink-0 items-center justify-center overflow-hidden rounded-lg"
-              style={{ backgroundColor: config.logo.bg }}
-            >
-              <Image
-                src={config.logo.src}
-                alt=""
-                width={config.logo.width}
-                height={config.logo.height}
-                className="h-11 w-auto object-contain"
-              />
-            </span>
-            <div className="text-right">
-              <p
-                className="text-sm font-extrabold tracking-wide"
-                style={{ color: bandIsLight ? accentHex : '#ffffff' }}
-              >
-                {docLabel}
-              </p>
-              <p
-                className="text-xs font-medium"
-                style={{ color: bandIsLight ? '#475569' : 'rgba(255,255,255,0.75)' }}
-              >
-                {invoice.invoiceNumber}
-              </p>
-            </div>
+        {/* Live preview of the exact PDF that will be shared/downloaded */}
+        {business ? (
+          <ScaledInvoice invoice={invoice} business={business} />
+        ) : (
+          <div className="flex h-64 items-center justify-center rounded-2xl bg-white text-sm text-slate-400 shadow-sm">
+            Loading preview…
           </div>
-          <div className="h-1" style={{ backgroundColor: accentHex }} />
-
-          {/* Bill to / dates */}
-          <div className="grid grid-cols-2 gap-3 px-5 py-4 text-sm">
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: accentHex }}>
-                Bill to
-              </p>
-              <p className="mt-1 truncate font-semibold text-slate-900">{invoice.customerName}</p>
-              {invoice.customerAddress && (
-                <p className="mt-0.5 whitespace-pre-wrap text-xs text-slate-500">{invoice.customerAddress}</p>
-              )}
-              {invoice.customerPhone && <p className="text-xs text-slate-500">{invoice.customerPhone}</p>}
-            </div>
-            <div className="text-right">
-              <div className="flex items-center justify-end gap-2">
-                <StatusBadge status={effectiveStatus(invoice)} />
-              </div>
-              <p className="mt-2 text-xs text-slate-400">
-                {leftDateLabel} <span className="font-medium text-slate-700">{invoice.issueDate}</span>
-              </p>
-              {showDue && (
-                <p className="text-xs text-slate-400">
-                  Due <span className="font-medium text-slate-700">{invoice.dueDate}</span>
-                </p>
-              )}
-              {overdueDays > 0 && (
-                <p className="text-xs font-semibold text-red-600">
-                  {overdueDays} day{overdueDays === 1 ? '' : 's'} overdue
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Items table */}
-          <div className="px-5">
-            <div
-              className="grid grid-cols-[1fr_auto] rounded-t-lg px-3 py-2 text-[11px] font-bold uppercase tracking-wide"
-              style={{
-                backgroundColor: `rgb(${config.pdf.tableHeadFill.join(',')})`,
-                color: `rgb(${config.pdf.tableHeadText.join(',')})`,
-              }}
-            >
-              <span>Description</span>
-              <span>Amount</span>
-            </div>
-            <div className="divide-y divide-slate-100 border-x border-b border-slate-100">
-              {invoice.lineItems.map((item) => (
-                <div key={item.id} className="grid grid-cols-[1fr_auto] gap-3 px-3 py-2.5 text-sm">
-                  <div className="min-w-0">
-                    <p className="font-medium text-slate-800">{item.description}</p>
-                    <p className="text-xs text-slate-400">
-                      {item.quantity} × {formatCurrency(item.unitPrice)}
-                    </p>
-                  </div>
-                  <p className="self-center font-semibold text-slate-900">
-                    {formatCurrency(item.quantity * item.unitPrice)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Totals */}
-          <div className="px-5 pb-5 pt-3">
-            <div className="ml-auto w-full max-w-[230px] space-y-1 text-sm">
-              {invoice.gstRegistered && (
-                <>
-                  <div className="flex justify-between text-slate-500">
-                    <span>Subtotal</span>
-                    <span>{formatCurrency(invoice.subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-500">
-                    <span>GST (10%)</span>
-                    <span>{formatCurrency(invoice.gstAmount)}</span>
-                  </div>
-                </>
-              )}
-              <div
-                className="flex items-center justify-between rounded-lg px-3 py-2 text-base font-bold text-white"
-                style={{ backgroundColor: accentHex }}
-              >
-                <span>{totalLabel}</span>
-                <span>{formatCurrency(invoice.total)}</span>
-              </div>
-              <p className="text-right text-[11px] text-slate-400">
-                {invoice.gstRegistered
-                  ? `Includes ${formatCurrency(invoice.gstAmount)} GST`
-                  : 'No GST has been charged'}
-              </p>
-            </div>
-
-            {(business?.bsb || business?.accountNumber) && (
-              <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-600" style={{ borderLeft: `3px solid ${accentHex}` }}>
-                <p className="font-bold text-slate-800">Payment details (EFT)</p>
-                {business.accountName && <p className="mt-1">Account name: {business.accountName}</p>}
-                {business.bankName && <p>Bank: {business.bankName}</p>}
-                {business.bsb && <p>BSB: {business.bsb}</p>}
-                {business.accountNumber && <p>Account no: {business.accountNumber}</p>}
-                <p className="mt-1 font-semibold">Reference: {invoice.invoiceNumber}</p>
-              </div>
-            )}
-
-            {invoice.notes && (
-              <div className="mt-4 text-xs">
-                <p className="font-bold uppercase tracking-wider" style={{ color: accentHex }}>
-                  Notes
-                </p>
-                <p className="mt-1 whitespace-pre-wrap text-slate-600">{invoice.notes}</p>
-              </div>
-            )}
-
-            <p className="mt-5 border-t border-slate-100 pt-3 text-center text-[11px] text-slate-400">
-              {config.pdf.footerNote}
-            </p>
-          </div>
-        </div>
+        )}
 
         {/* Status switcher */}
         <div>
