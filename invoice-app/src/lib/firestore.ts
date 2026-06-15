@@ -12,7 +12,7 @@ import {
   runTransaction,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Business, Customer, Invoice, LineItem, normalizeStatus } from '@/types';
+import { Business, Customer, Invoice, LineItem, SavedItem, normalizeStatus } from '@/types';
 import { GST_RATE, getBusinessConfig } from './constants';
 
 // ---------- Business settings ----------
@@ -47,6 +47,17 @@ export async function getBusiness(businessId: string): Promise<Business> {
 export async function saveBusiness(business: Business): Promise<void> {
   const { id, ...data } = business;
   await setDoc(doc(db(), 'businesses', id), data, { merge: true });
+}
+
+// ---------- Saved item presets (stored on the business record) ----------
+
+export async function getSavedItems(businessId: string): Promise<SavedItem[]> {
+  const biz = await getBusiness(businessId);
+  return biz.savedItems || [];
+}
+
+export async function saveSavedItems(businessId: string, items: SavedItem[]): Promise<void> {
+  await setDoc(doc(db(), 'businesses', businessId), { savedItems: items }, { merge: true });
 }
 
 // ---------- Customers ----------

@@ -1,3 +1,10 @@
+export interface SavedItem {
+  id: string;
+  name: string;
+  description: string;
+  unitPrice: number;
+}
+
 export interface Business {
   id: string;
   name: string;
@@ -13,6 +20,7 @@ export interface Business {
   invoicePrefix: string;
   nextInvoiceNumber: number;
   paymentTermsDays: number;
+  savedItems?: SavedItem[]; // tap-to-add product presets, per business
 }
 
 export interface Customer {

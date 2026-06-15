@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Trash2, UserPlus, Truck, Wrench, Share2, Save } from 'lucide-react';
-import { Business, Customer, Invoice, InvoiceStatus, LineItem, daysOverdue } from '@/types';
+import { Business, Customer, Invoice, InvoiceStatus, LineItem, SavedItem, daysOverdue } from '@/types';
 import {
   calcTotals,
   claimNextInvoiceNumber,
@@ -115,6 +115,18 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
     setLineItems((items) => items.map((i) => (i.id === id ? { ...i, ...patch } : i)));
 
   const addItem = (description = '') => setLineItems((items) => [...items, emptyItem(description)]);
+
+  const savedItems = business?.savedItems ?? [];
+  const addPreset = (it: SavedItem) =>
+    setLineItems((items) => [
+      ...items,
+      {
+        id: crypto.randomUUID(),
+        description: it.description ? `${it.name} — ${it.description}` : it.name,
+        quantity: 1,
+        unitPrice: it.unitPrice,
+      },
+    ]);
 
   async function handleAddCustomer() {
     if (!newCust.name.trim()) return;
@@ -325,6 +337,43 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
       {/* Line items */}
       <section>
         <Label>Items</Label>
+
+        {/* Saved-item quick add */}
+        {savedItems.length > 0 ? (
+          <div className="mb-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-slate-500">Tap to add</p>
+              <button
+                type="button"
+                onClick={() => router.push(`/businesses/${businessId}/items`)}
+                className={`text-xs font-semibold ${config.ui.accentText}`}
+              >
+                Manage
+              </button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {savedItems.map((it) => (
+                <button
+                  key={it.id}
+                  type="button"
+                  onClick={() => addPreset(it)}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm active:bg-slate-50"
+                >
+                  {it.name} · {formatCurrency(it.unitPrice)}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => router.push(`/businesses/${businessId}/items`)}
+            className={`mb-3 text-xs font-semibold ${config.ui.accentText}`}
+          >
+            + Set up saved items
+          </button>
+        )}
+
         <div className="space-y-3">
           {lineItems.map((item) => (
             <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-3">

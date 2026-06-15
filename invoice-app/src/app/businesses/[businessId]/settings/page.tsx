@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { LogOut } from 'lucide-react';
+import Link from 'next/link';
+import { LogOut, Package, ChevronRight } from 'lucide-react';
 import TopBar from '@/components/ui/TopBar';
 import Button from '@/components/ui/Button';
 import { Input, Textarea, Toggle, Label } from '@/components/ui/Field';
@@ -46,6 +47,20 @@ export default function SettingsPage() {
       <TopBar title="Business Settings" />
 
       <div className="space-y-6 px-4 py-4">
+        <Link
+          href={`/businesses/${businessId}/items`}
+          className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm ring-1 ring-slate-100/70 active:bg-slate-50"
+        >
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+            <Package size={20} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-slate-900">Saved items</span>
+            <span className="block text-xs text-slate-500">Products & prices you add with one tap</span>
+          </span>
+          <ChevronRight size={20} className="text-slate-400" />
+        </Link>
+
         <section className="space-y-4">
           <h2 className="text-sm font-bold uppercase tracking-wide text-slate-400">Business details</h2>
           <Input label="Business name" value={biz.name} onChange={(e) => set({ name: e.target.value })} />
