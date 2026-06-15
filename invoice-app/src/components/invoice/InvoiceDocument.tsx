@@ -130,73 +130,46 @@ function CBP({ invoice, business }: Props) {
 
   return (
     <div style={page}>
-      <div style={{ padding: 36 }}>
-        {/* Header */}
-        <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start' }}>
-          <div style={{ flex: 1.15 }}>
-            <div
-              style={{
-                background: navy,
-                borderRadius: 14,
-                padding: '16px 20px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                clipPath: 'polygon(0 0, 100% 0, 100% 72%, 90% 100%, 0 100%)',
-              }}
-            >
-              <div style={{ background: '#fff', borderRadius: 9, padding: '7px 9px', display: 'flex' }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={cfg.logo.src} alt="" style={{ height: 40, display: 'block' }} />
-              </div>
-            </div>
-            <div style={{ height: 4, width: 130, background: orange, borderRadius: 2, margin: '8px 0 14px' }} />
-            <div style={{ display: 'grid', gap: 6 }}>
-              <ContactRow icon={MapPin} text={business.address} color={orange} />
-              <ContactRow icon={Phone} text={business.phone} color={orange} />
-              <ContactRow icon={Mail} text={business.email} color={orange} />
-              <ContactRow icon={Hash} text={business.abn ? `ABN ${business.abn}` : ''} color={orange} />
-            </div>
+      <div style={{ position: 'absolute', top: 150, right: -120, width: 360, height: 360, borderRadius: '50%', background: orange, opacity: 0.07 }} />
+      <div style={{ position: 'absolute', bottom: 60, left: -160, width: 340, height: 340, borderRadius: '50%', background: navy, opacity: 0.05 }} />
+
+      {/* Full-width brand banner */}
+      <div style={{ position: 'relative', zIndex: 1, background: navy }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 36px' }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: '12px 22px', display: 'inline-flex' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={cfg.logo.src} alt={business.name} style={{ height: 80, display: 'block' }} />
+          </div>
+          <div style={{ textAlign: 'right', color: '#fff' }}>
+            <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: 1.5 }}>{docTitle(invoice)}</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>{invoice.invoiceNumber}</div>
+          </div>
+        </div>
+        <div style={{ height: 6, background: orange }} />
+      </div>
+
+      <div style={{ position: 'relative', zIndex: 1, padding: '24px 36px 36px' }}>
+        {/* business contact + details card */}
+        <div style={{ display: 'flex', gap: 18, justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ display: 'grid', gap: 6, paddingTop: 4 }}>
+            <ContactRow icon={MapPin} text={business.address} color={orange} />
+            <ContactRow icon={Phone} text={business.phone} color={orange} />
+            <ContactRow icon={Mail} text={business.email} color={orange} />
+            <ContactRow icon={Hash} text={business.abn ? `ABN ${business.abn}` : ''} color={orange} />
           </div>
 
           <div style={{ width: 290 }}>
-            <div
-              style={{
-                background: navy,
-                color: '#fff',
-                borderRadius: 12,
-                padding: '14px 20px',
-                textAlign: 'right',
-                clipPath: 'polygon(7% 0, 100% 0, 100% 100%, 0 100%)',
-              }}
-            >
-              <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: 1.5 }}>{docTitle(invoice)}</div>
-            </div>
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, marginTop: 10, overflow: 'hidden' }}>
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
               {details.map(([k, v], i) => (
                 <div
                   key={k}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    padding: '9px 14px',
-                    fontSize: 12,
-                    borderTop: i ? '1px solid #f1f5f9' : 'none',
-                  }}
+                  style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', fontSize: 12, borderTop: i ? '1px solid #f1f5f9' : 'none' }}
                 >
                   <span style={{ color: '#64748b', fontWeight: 700 }}>{k}</span>
                   <span style={{ fontWeight: 700 }}>{v}</span>
                 </div>
               ))}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '9px 14px',
-                  borderTop: '1px solid #f1f5f9',
-                  background: '#f8fafc',
-                }}
-              >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 14px', borderTop: '1px solid #f1f5f9', background: '#f8fafc' }}>
                 <span style={{ color: '#64748b', fontWeight: 700, fontSize: 12 }}>
                   {invoice.status === 'Quote' ? 'TYPE' : 'STATUS'}
                 </span>
@@ -206,23 +179,19 @@ function CBP({ invoice, business }: Props) {
           </div>
         </div>
 
-        {/* Bill / Ship */}
-        <div style={{ display: 'flex', gap: 16, marginTop: 26 }}>
-          {(['BILL TO', 'SHIP TO'] as const).map((label) => (
-            <div key={label} style={{ flex: 1 }}>
-              <div style={{ background: navy, color: '#fff', fontSize: 12, fontWeight: 800, letterSpacing: 0.8, padding: '6px 12px', borderRadius: 6 }}>
-                {label}
-              </div>
-              <div style={{ padding: '10px 4px 0' }}>
-                <div style={{ fontWeight: 800, fontSize: 14 }}>{invoice.customerName || '—'}</div>
-                <div style={{ fontSize: 12, color: '#475569', marginTop: 3, lineHeight: 1.5 }}>
-                  {invoice.customerAddress && <div>{invoice.customerAddress}</div>}
-                  {invoice.customerPhone && <div>{invoice.customerPhone}</div>}
-                  {invoice.customerEmail && <div>{invoice.customerEmail}</div>}
-                </div>
-              </div>
+        {/* Bill to */}
+        <div style={{ marginTop: 26, maxWidth: 380 }}>
+          <div style={{ display: 'inline-block', background: navy, color: '#fff', fontSize: 12, fontWeight: 800, letterSpacing: 0.8, padding: '6px 14px', borderRadius: 6 }}>
+            BILL TO
+          </div>
+          <div style={{ padding: '10px 4px 0' }}>
+            <div style={{ fontWeight: 800, fontSize: 15 }}>{invoice.customerName || '—'}</div>
+            <div style={{ fontSize: 12.5, color: '#475569', marginTop: 3, lineHeight: 1.6 }}>
+              {invoice.customerAddress && <div>{invoice.customerAddress}</div>}
+              {invoice.customerPhone && <div>{invoice.customerPhone}</div>}
+              {invoice.customerEmail && <div>{invoice.customerEmail}</div>}
             </div>
-          ))}
+          </div>
         </div>
 
         {od > 0 && (
@@ -332,41 +301,32 @@ function BFD({ invoice, business }: Props) {
 
   return (
     <div style={page}>
-      <div style={{ padding: 40 }}>
-        <div style={{ fontSize: 40, fontWeight: 800, letterSpacing: -1 }}>{docTitle(invoice)}</div>
-        <div style={{ height: 3, background: red, marginTop: 6 }} />
+      <div style={{ position: 'absolute', top: 150, right: -120, width: 350, height: 350, borderRadius: '50%', background: red, opacity: 0.06 }} />
+      <div style={{ position: 'absolute', bottom: -130, left: -120, width: 340, height: 340, borderRadius: '50%', background: '#111113', opacity: 0.05 }} />
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 26 }}>
-          {/* left: logo + business */}
-          <div style={{ display: 'flex', gap: 14 }}>
-            <div
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: 999,
-                background: '#0b0b0c',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden',
-                flexShrink: 0,
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={cfg.logo.src} alt="" style={{ width: 52 }} />
-            </div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 15 }}>{business.name}</div>
-              <div style={{ display: 'grid', gap: 5, marginTop: 6 }}>
-                <ContactRow icon={MapPin} text={business.address} color="#111113" />
-                <ContactRow icon={Phone} text={business.phone} color="#111113" />
-                <ContactRow icon={Mail} text={business.email} color="#111113" />
-                <ContactRow icon={Hash} text={business.abn ? `ABN ${business.abn}` : ''} color="#111113" />
-              </div>
-            </div>
+      {/* Full-width brand banner with full logo */}
+      <div style={{ position: 'relative', zIndex: 1, background: '#0b0b0c' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 36px' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={cfg.logo.src} alt={business.name} style={{ height: 76, display: 'block' }} />
+          <div style={{ textAlign: 'right', color: '#fff' }}>
+            <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: 1 }}>{docTitle(invoice)}</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>{invoice.invoiceNumber}</div>
+          </div>
+        </div>
+        <div style={{ height: 6, background: red }} />
+      </div>
+
+      <div style={{ position: 'relative', zIndex: 1, padding: '24px 40px 40px' }}>
+        {/* business contact + details card */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ display: 'grid', gap: 5, paddingTop: 4 }}>
+            <ContactRow icon={MapPin} text={business.address} color={red} />
+            <ContactRow icon={Phone} text={business.phone} color={red} />
+            <ContactRow icon={Mail} text={business.email} color={red} />
+            <ContactRow icon={Hash} text={business.abn ? `ABN ${business.abn}` : ''} color={red} />
           </div>
 
-          {/* right: details card */}
           <div style={{ width: 280 }}>
             <div style={{ background: '#111113', color: '#fff', fontSize: 12, fontWeight: 800, letterSpacing: 0.6, padding: '8px 14px', borderRadius: '8px 8px 0 0' }}>
               INVOICE DETAILS
@@ -493,10 +453,12 @@ function Fremantle({ invoice, business }: Props) {
 
   return (
     <div style={page}>
+      <div style={{ position: 'absolute', bottom: -130, right: -110, width: 360, height: 360, borderRadius: '50%', background: red, opacity: 0.06 }} />
+      <div style={{ position: 'absolute', top: 220, left: -150, width: 300, height: 300, borderRadius: '50%', background: red, opacity: 0.04 }} />
       {/* Red band */}
-      <div style={{ background: red, padding: '22px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ background: red, padding: '24px 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={cfg.logo.src} alt="" style={{ height: 56 }} />
+        <img src={cfg.logo.src} alt="" style={{ height: 64 }} />
         <div style={{ textAlign: 'right', color: '#fff' }}>
           <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: 1 }}>{docTitle(invoice)}</div>
           <div style={{ fontSize: 11, marginTop: 6, lineHeight: 1.6, opacity: 0.95 }}>
@@ -508,7 +470,7 @@ function Fremantle({ invoice, business }: Props) {
         </div>
       </div>
 
-      <div style={{ padding: 40 }}>
+      <div style={{ padding: 40, position: 'relative', zIndex: 1 }}>
         {/* Detail strip */}
         <div style={{ display: 'flex', gap: 12, borderBottom: '1px solid #e2e8f0', paddingBottom: 16 }}>
           {strip.map(([k, v]) => (

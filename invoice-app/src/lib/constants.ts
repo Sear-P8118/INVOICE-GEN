@@ -53,7 +53,7 @@ export const BUSINESSES: BusinessConfig[] = [
     name: 'Car Battery Perth',
     tagline: '24/7 mobile battery replacement',
     invoicePrefix: 'CBP',
-    logo: { src: '/logos/cbp.png', width: 800, height: 533, bg: '#ffffff' },
+    logo: { src: '/logos/cbp.png', width: 1000, height: 702, bg: '#ffffff' },
     ui: {
       gradient: 'from-[#1E3A5F] to-[#142840]',
       accent: 'bg-[#FF6B35] active:bg-[#e85d2a]',
