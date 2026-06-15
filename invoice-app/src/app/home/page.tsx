@@ -28,7 +28,10 @@ function HomeInner() {
           'radial-gradient(900px 520px at 100% 0%, rgba(59,130,246,0.18), transparent 55%), radial-gradient(700px 500px at 0% 100%, rgba(99,102,241,0.14), transparent 55%), #060a14',
       }}
     >
-      <header className="flex items-center justify-between pb-2 pt-14">
+      <header
+        className="flex items-center justify-between pb-2"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 3.5rem)' }}
+      >
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
             Popal Holdings

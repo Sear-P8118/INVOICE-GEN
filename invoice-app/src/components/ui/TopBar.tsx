@@ -13,7 +13,10 @@ interface Props {
 export default function TopBar({ title, back, right }: Props) {
   const router = useRouter();
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <header
+      className="sticky top-0 z-30 border-b border-slate-200 bg-white"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    >
       <div className="mx-auto flex min-h-14 max-w-2xl items-center gap-1 px-3 lg:max-w-4xl lg:px-5">
         {back && (
           <button

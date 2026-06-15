@@ -50,7 +50,10 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <header className={`bg-gradient-to-br ${config.ui.gradient} px-5 pb-6 pt-12 text-white`}>
+      <header
+        className={`bg-gradient-to-br ${config.ui.gradient} px-5 pb-6 text-white`}
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 3rem)' }}
+      >
         <div className="mb-5">
           <p className="text-xl font-extrabold leading-tight">Welcome back, Sami 👋</p>
           <p className="mt-0.5 text-sm text-white/75">
