@@ -100,13 +100,15 @@ export async function saveInvoice(
   invoice: Omit<Invoice, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }
 ): Promise<string> {
   const now = new Date().toISOString();
-  if (invoice.id) {
-    const { id, ...data } = invoice;
+  // Strip `id` from the written data — for a new invoice it is undefined,
+  // and Firestore rejects any field whose value is undefined.
+  const { id, ...data } = invoice;
+  if (id) {
     await updateDoc(doc(db(), 'invoices', id), { ...data, updatedAt: now });
     return id;
   }
   const ref = await addDoc(collection(db(), 'invoices'), {
-    ...invoice,
+    ...data,
     createdAt: now,
     updatedAt: now,
   });

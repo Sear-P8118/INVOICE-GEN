@@ -35,6 +35,8 @@ export function db(): Firestore {
   if (!_db) {
     // Offline persistence so the app keeps working with poor mobile signal
     _db = initializeFirestore(app(), {
+      // Drop undefined fields instead of throwing 'invalid-argument' on write.
+      ignoreUndefinedProperties: true,
       localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     });
   }
