@@ -400,7 +400,7 @@ function BFD({ invoice, business }: Props) {
             </div>
             {(business.bsb || business.accountNumber) && (
               <div style={{ marginTop: 10, lineHeight: 1.5 }}>
-                {business.accountName && <div>Account: {business.accountName}</div>}
+                {business.accountName && <div style={{ fontWeight: 800, color: '#0f172a' }}>{business.accountName}</div>}
                 {business.bsb && <div>BSB: {business.bsb}</div>}
                 {business.accountNumber && <div>Acc: {business.accountNumber}</div>}
                 <div>Ref: {invoice.invoiceNumber}</div>
@@ -598,9 +598,9 @@ function PaymentBox({ business, invoice, accent, title }: { business: Business; 
         <CreditCard size={15} color={accent} /> {title}
       </div>
       <div style={{ fontSize: 12, color: '#475569', marginTop: 8, lineHeight: 1.7 }}>
-        {business.accountName && <div>Account Name: {business.accountName}</div>}
+        {business.accountName && <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13 }}>{business.accountName}</div>}
         {business.bsb && <div>BSB: {business.bsb}</div>}
-        {business.accountNumber && <div>Account Number: {business.accountNumber}</div>}
+        {business.accountNumber && <div>Account: {business.accountNumber}</div>}
         <div style={{ fontWeight: 700 }}>Reference: {invoice.invoiceNumber}</div>
       </div>
     </div>
