@@ -7,13 +7,12 @@ import { Business, Customer, Invoice, InvoiceStatus, LineItem, SavedItem, daysOv
 import {
   calcTotals,
   claimNextInvoiceNumber,
-  getBusiness,
-  getCustomers,
+  watchBusiness,
+  watchCustomers,
   saveCustomer,
   saveInvoice,
 } from '@/lib/firestore';
 import { formatCurrency, getBusinessConfig } from '@/lib/constants';
-import { shareInvoicePDF } from '@/lib/pdf';
 import { Input, Textarea, Select, Label } from '@/components/ui/Field';
 import Button from '@/components/ui/Button';
 import Sheet from '@/components/ui/Sheet';
@@ -80,19 +79,24 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
 
   // New-customer sheet
   const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [addingCustomer, setAddingCustomer] = useState(false);
   const [newCust, setNewCust] = useState({ name: '', email: '', phone: '', address: '' });
 
   const needsDue = type === 'Pending' || type === 'Overdue';
 
-  useEffect(() => {
-    Promise.all([getBusiness(businessId), getCustomers(businessId)]).then(([biz, custs]) => {
-      setBusiness(biz);
-      setCustomers(custs);
-      if (!existing) {
-        setDueDate((d) => d || format(addDays(new Date(), biz.paymentTermsDays || 14), 'yyyy-MM-dd'));
-      }
-    });
-  }, [businessId, existing]);
+  // Live cache-first loads: the form is usable instantly instead of waiting
+  // on two network round-trips.
+  useEffect(
+    () =>
+      watchBusiness(businessId, (biz) => {
+        setBusiness(biz);
+        if (!existing) {
+          setDueDate((d) => d || format(addDays(new Date(), biz.paymentTermsDays || 14), 'yyyy-MM-dd'));
+        }
+      }),
+    [businessId, existing]
+  );
+  useEffect(() => watchCustomers(businessId, setCustomers), [businessId]);
 
   // Switching to a type that needs a due date fills a sensible default.
   function chooseType(next: InvoiceStatus) {
@@ -129,13 +133,23 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
     ]);
 
   async function handleAddCustomer() {
-    if (!newCust.name.trim()) return;
-    const id = await saveCustomer({ ...newCust, businessId });
-    const created: Customer = { ...newCust, id, businessId, createdAt: new Date().toISOString() };
-    setCustomers((c) => [...c, created].sort((a, b) => a.name.localeCompare(b.name)));
-    setCustomerId(id);
-    setShowNewCustomer(false);
-    setNewCust({ name: '', email: '', phone: '', address: '' });
+    // The in-flight guard stops a double-tap creating the same contact twice.
+    if (!newCust.name.trim() || addingCustomer) return;
+    setAddingCustomer(true);
+    try {
+      const id = await saveCustomer({ ...newCust, businessId });
+      // The live watcher refreshes the list; select the new/reused contact now.
+      setCustomers((c) => {
+        if (c.some((x) => x.id === id)) return c;
+        const created: Customer = { ...newCust, id, businessId, createdAt: new Date().toISOString() };
+        return [...c, created].sort((a, b) => a.name.localeCompare(b.name));
+      });
+      setCustomerId(id);
+      setShowNewCustomer(false);
+      setNewCust({ name: '', email: '', phone: '', address: '' });
+    } finally {
+      setAddingCustomer(false);
+    }
   }
 
   // Persist the invoice; returns the saved record (with id) or null on failure.
@@ -234,6 +248,8 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
     }
     // The invoice is saved. Sharing is best-effort and must never report a save error.
     try {
+      // Loaded on demand so the heavy PDF machinery isn't in the page bundle.
+      const { shareInvoicePDF } = await import('@/lib/pdf');
       await shareInvoicePDF(res.invoice, res.business);
     } catch {
       /* user cancelled or the platform blocked sharing — the invoice is still saved */
@@ -516,8 +532,13 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
           <Input label="Phone" type="tel" inputMode="tel" value={newCust.phone} onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })} />
           <Input label="Email" type="email" inputMode="email" value={newCust.email} onChange={(e) => setNewCust({ ...newCust, email: e.target.value })} />
           <Textarea label="Address" rows={2} value={newCust.address} onChange={(e) => setNewCust({ ...newCust, address: e.target.value })} />
-          <Button full onClick={handleAddCustomer} disabled={!newCust.name.trim()} className={`${config.ui.accent} text-white`}>
-            Add Customer
+          <Button
+            full
+            onClick={handleAddCustomer}
+            disabled={!newCust.name.trim() || addingCustomer}
+            className={`${config.ui.accent} text-white`}
+          >
+            {addingCustomer ? 'Adding…' : 'Add Customer'}
           </Button>
         </div>
       </Sheet>

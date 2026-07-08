@@ -7,7 +7,7 @@ import TopBar from '@/components/ui/TopBar';
 import Sheet from '@/components/ui/Sheet';
 import Button from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Field';
-import { getCustomers, saveCustomer, deleteCustomer } from '@/lib/firestore';
+import { watchCustomers, saveCustomer, deleteCustomer } from '@/lib/firestore';
 import { Customer } from '@/types';
 
 const blank = { name: '', email: '', phone: '', address: '' };
@@ -21,9 +21,7 @@ export default function CustomersPage() {
   const [deleting, setDeleting] = useState<Customer | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    getCustomers(businessId).then(setCustomers).catch(() => setCustomers([]));
-  }, [businessId]);
+  useEffect(() => watchCustomers(businessId, setCustomers), [businessId]);
 
   const filtered = useMemo(() => {
     if (!customers) return null;
@@ -43,17 +41,19 @@ export default function CustomersPage() {
   }
 
   async function handleSave() {
-    if (!form.name.trim()) return;
+    if (!form.name.trim() || busy) return;
     setBusy(true);
-    const id = await saveCustomer({
-      ...form,
-      businessId,
-      id: editing !== 'new' && editing ? editing.id : undefined,
-    });
-    setCustomers(await getCustomers(businessId));
-    setBusy(false);
-    setEditing(null);
-    void id;
+    try {
+      // The live watcher updates the list automatically after the save.
+      await saveCustomer({
+        ...form,
+        businessId,
+        id: editing !== 'new' && editing ? editing.id : undefined,
+      });
+      setEditing(null);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleDelete() {

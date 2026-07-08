@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Plus, Search, FileText } from 'lucide-react';
 import TopBar from '@/components/ui/TopBar';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { getInvoices } from '@/lib/firestore';
+import { watchInvoices } from '@/lib/firestore';
 import { formatCurrency } from '@/lib/constants';
 import { Invoice, InvoiceStatus, INVOICE_STATUSES, effectiveStatus } from '@/types';
 
@@ -16,9 +16,7 @@ export default function InvoicesPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'All'>('All');
 
-  useEffect(() => {
-    getInvoices(businessId).then(setInvoices).catch(() => setInvoices([]));
-  }, [businessId]);
+  useEffect(() => watchInvoices(businessId, setInvoices), [businessId]);
 
   const filtered = useMemo(() => {
     if (!invoices) return null;

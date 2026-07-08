@@ -41,6 +41,7 @@ export default function QuickJobSheet({ businessId, existing, onClose, onSaved }
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
 
   async function handleSave() {
+    if (busy) return; // double-tap guard
     if (!form.customerName.trim() || !form.customerPhone.trim() || !form.description.trim()) {
       setError('Please add a name, phone and what was done.');
       return;

@@ -10,6 +10,8 @@ import {
   query,
   where,
   runTransaction,
+  onSnapshot,
+  Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Business, Customer, Invoice, Job, LineItem, SavedItem, normalizeStatus } from '@/types';
@@ -44,6 +46,15 @@ export async function getBusiness(businessId: string): Promise<Business> {
   return { ...defaultBusiness(businessId), ...snap.data(), id: businessId };
 }
 
+// Live version: fires instantly from the local cache, then again with fresh
+// server data — pages render immediately instead of waiting a network round-trip.
+export function watchBusiness(businessId: string, cb: (b: Business) => void): Unsubscribe {
+  return onSnapshot(doc(db(), 'businesses', businessId), (snap) => {
+    if (!snap.exists()) cb(defaultBusiness(businessId));
+    else cb({ ...defaultBusiness(businessId), ...snap.data(), id: businessId });
+  });
+}
+
 export async function saveBusiness(business: Business): Promise<void> {
   const { id, ...data } = business;
   await setDoc(doc(db(), 'businesses', id), data, { merge: true });
@@ -62,11 +73,51 @@ export async function saveSavedItems(businessId: string, items: SavedItem[]): Pr
 
 // ---------- Customers ----------
 
+// Two records are "the same person" if the trimmed name and phone digits match.
+function customerKey(c: Pick<Customer, 'name' | 'phone'>): string {
+  return `${c.name.trim().toLowerCase()}|${(c.phone || '').replace(/\D/g, '')}`;
+}
+
+// Collapses accidental double-entries (same name + phone) so each contact shows
+// once. Keeps the oldest record and quietly deletes the newer exact copies.
+function dedupeCustomers(customers: Customer[]): Customer[] {
+  const byKey = new Map<string, Customer>();
+  const extras: Customer[] = [];
+  const sorted = [...customers].sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+  for (const c of sorted) {
+    const key = customerKey(c);
+    const kept = byKey.get(key);
+    if (!kept) {
+      byKey.set(key, c);
+    } else if (
+      c.email === kept.email &&
+      c.address === kept.address
+    ) {
+      extras.push(c); // a perfect duplicate — safe to remove
+    }
+    // Same name+phone but different email/address: keep both visible so no data is lost.
+  }
+  // Fire-and-forget cleanup of perfect duplicates.
+  extras.forEach((c) => deleteDoc(doc(db(), 'customers', c.id)).catch(() => {}));
+  const extraIds = new Set(extras.map((c) => c.id));
+  return customers
+    .filter((c) => !extraIds.has(c.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function getCustomers(businessId: string): Promise<Customer[]> {
   const q = query(collection(db(), 'customers'), where('businessId', '==', businessId));
   const snap = await getDocs(q);
   const customers = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Customer));
-  return customers.sort((a, b) => a.name.localeCompare(b.name));
+  return dedupeCustomers(customers);
+}
+
+export function watchCustomers(businessId: string, cb: (c: Customer[]) => void): Unsubscribe {
+  const q = query(collection(db(), 'customers'), where('businessId', '==', businessId));
+  return onSnapshot(q, (snap) => {
+    const customers = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Customer));
+    cb(dedupeCustomers(customers));
+  });
 }
 
 export async function saveCustomer(
@@ -76,6 +127,15 @@ export async function saveCustomer(
     const { id, ...data } = customer;
     await updateDoc(doc(db(), 'customers', id), data);
     return id;
+  }
+  // If this person already exists (same name + phone), update them instead of
+  // creating a second contact.
+  const existing = await getCustomers(customer.businessId);
+  const match = existing.find((c) => customerKey(c) === customerKey(customer));
+  if (match) {
+    const { name, email, phone, address } = customer;
+    await updateDoc(doc(db(), 'customers', match.id), { name, email, phone, address });
+    return match.id;
   }
   const ref = await addDoc(collection(db(), 'customers'), {
     ...customer,
@@ -98,6 +158,25 @@ export async function getInvoices(businessId: string): Promise<Invoice[]> {
     return { ...inv, status: normalizeStatus(inv.status) };
   });
   return invoices.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function watchInvoices(businessId: string, cb: (i: Invoice[]) => void): Unsubscribe {
+  const q = query(collection(db(), 'invoices'), where('businessId', '==', businessId));
+  return onSnapshot(q, (snap) => {
+    const invoices = snap.docs.map((d) => {
+      const inv = { ...d.data(), id: d.id } as Invoice;
+      return { ...inv, status: normalizeStatus(inv.status) };
+    });
+    cb(invoices.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+  });
+}
+
+export function watchInvoice(id: string, cb: (i: Invoice | null) => void): Unsubscribe {
+  return onSnapshot(doc(db(), 'invoices', id), (snap) => {
+    if (!snap.exists()) return cb(null);
+    const inv = { ...snap.data(), id: snap.id } as Invoice;
+    cb({ ...inv, status: normalizeStatus(inv.status) });
+  });
 }
 
 export async function getInvoice(id: string): Promise<Invoice | null> {
@@ -177,6 +256,14 @@ export async function getJobs(businessId: string): Promise<Job[]> {
   return snap.docs
     .map((d) => ({ ...d.data(), id: d.id } as Job))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function watchJobs(businessId: string, cb: (j: Job[]) => void): Unsubscribe {
+  const q = query(collection(db(), 'jobs'), where('businessId', '==', businessId));
+  return onSnapshot(q, (snap) => {
+    const jobs = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Job));
+    cb(jobs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+  });
 }
 
 export async function saveJob(job: Omit<Job, 'id' | 'createdAt'> & { id?: string }): Promise<string> {

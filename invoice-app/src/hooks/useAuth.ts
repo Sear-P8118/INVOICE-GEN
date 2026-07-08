@@ -19,13 +19,11 @@ function isAllowed(email: string | null): boolean {
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  // With no Firebase config there is nothing to wait for.
+  const [loading, setLoading] = useState(isFirebaseConfigured);
 
   useEffect(() => {
-    if (!isFirebaseConfigured) {
-      setLoading(false);
-      return;
-    }
+    if (!isFirebaseConfigured) return;
     return onAuthStateChanged(auth(), (u) => {
       if (u && !isAllowed(u.email)) {
         fbSignOut(auth());

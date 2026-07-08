@@ -8,7 +8,7 @@ import TopBar from '@/components/ui/TopBar';
 import Sheet from '@/components/ui/Sheet';
 import Button from '@/components/ui/Button';
 import QuickJobSheet from '@/components/job/QuickJobSheet';
-import { getJobs, deleteJob, convertJobToInvoice } from '@/lib/firestore';
+import { watchJobs, deleteJob, convertJobToInvoice } from '@/lib/firestore';
 import { formatCurrency, getBusinessConfig } from '@/lib/constants';
 import { Job } from '@/types';
 
@@ -30,10 +30,7 @@ export default function JobsPage() {
   const [deleting, setDeleting] = useState<Job | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  function reload() {
-    getJobs(businessId).then(setJobs).catch(() => setJobs([]));
-  }
-  useEffect(reload, [businessId]);
+  useEffect(() => watchJobs(businessId, setJobs), [businessId]);
 
   const { needed, invoiced } = useMemo(() => {
     const list = jobs || [];
@@ -66,7 +63,6 @@ export default function JobsPage() {
     if (!deleting) return;
     await deleteJob(deleting.id);
     setDeleting(null);
-    reload();
   }
 
   return (
@@ -181,7 +177,7 @@ export default function JobsPage() {
           businessId={businessId}
           existing={editing}
           onClose={() => setSheetOpen(false)}
-          onSaved={reload}
+          onSaved={() => {}}
         />
       )}
 

@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Plus, ArrowLeftRight, FileWarning, CheckCircle2, ClipboardList } from 'lucide-react';
-import { getInvoices, getJobs } from '@/lib/firestore';
+import { watchInvoices, watchJobs } from '@/lib/firestore';
 import { getBusinessConfig, formatCurrency } from '@/lib/constants';
 import { Invoice, effectiveStatus } from '@/types';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -20,16 +20,13 @@ export default function DashboardPage() {
   const [jobsNeeded, setJobsNeeded] = useState<number | null>(null);
   const [quickOpen, setQuickOpen] = useState(false);
 
-  useEffect(() => {
-    getInvoices(businessId).then(setInvoices).catch(() => setInvoices([]));
-  }, [businessId]);
-
-  function reloadJobs() {
-    getJobs(businessId)
-      .then((j) => setJobsNeeded(j.filter((x) => !x.invoiceId).length))
-      .catch(() => setJobsNeeded(0));
-  }
-  useEffect(reloadJobs, [businessId]);
+  // Live snapshots render instantly from the on-device cache, then refresh
+  // with server data — no waiting on the network for every page open.
+  useEffect(() => watchInvoices(businessId, setInvoices), [businessId]);
+  useEffect(
+    () => watchJobs(businessId, (j) => setJobsNeeded(j.filter((x) => !x.invoiceId).length)),
+    [businessId]
+  );
 
   const stats = useMemo(() => {
     if (!invoices) return null;
@@ -204,7 +201,7 @@ export default function DashboardPage() {
       </div>
 
       {quickOpen && (
-        <QuickJobSheet businessId={businessId} onClose={() => setQuickOpen(false)} onSaved={reloadJobs} />
+        <QuickJobSheet businessId={businessId} onClose={() => setQuickOpen(false)} onSaved={() => {}} />
       )}
     </div>
   );

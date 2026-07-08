@@ -8,8 +8,7 @@ import Button from '@/components/ui/Button';
 import Sheet from '@/components/ui/Sheet';
 import { Input, Textarea } from '@/components/ui/Field';
 import ScaledInvoice from '@/components/invoice/ScaledInvoice';
-import { getBusiness, getInvoice, updateInvoiceStatus, deleteInvoice, convertQuoteToInvoice } from '@/lib/firestore';
-import { downloadInvoicePDF, shareInvoicePDF, invoicePdfBase64 } from '@/lib/pdf';
+import { watchBusiness, watchInvoice, updateInvoiceStatus, deleteInvoice, convertQuoteToInvoice } from '@/lib/firestore';
 import { getBusinessConfig } from '@/lib/constants';
 import { auth } from '@/lib/firebase';
 import { Business, Invoice, InvoiceStatus, INVOICE_STATUSES } from '@/types';
@@ -33,10 +32,9 @@ export default function InvoiceDetailPage() {
   const [emailMsg, setEmailMsg] = useState('');
   const [emailState, setEmailState] = useState<'idle' | 'sending' | 'sent' | string>('idle');
 
-  useEffect(() => {
-    getInvoice(invoiceId).then(setInvoice);
-    getBusiness(businessId).then(setBusiness);
-  }, [invoiceId, businessId]);
+  // Live cache-first reads: the page renders instantly and stays accurate.
+  useEffect(() => watchInvoice(invoiceId, setInvoice), [invoiceId]);
+  useEffect(() => watchBusiness(businessId, setBusiness), [businessId]);
 
   async function setStatus(status: InvoiceStatus) {
     if (!invoice) return;
@@ -86,6 +84,7 @@ export default function InvoiceDetailPage() {
     setEmailState('sending');
     try {
       const token = await auth().currentUser?.getIdToken();
+      const { invoicePdfBase64 } = await import('@/lib/pdf');
       const pdfBase64 = await invoicePdfBase64(invoice, business);
       const res = await fetch('/api/send-invoice', {
         method: 'POST',
@@ -194,10 +193,10 @@ export default function InvoiceDetailPage() {
                 <Mail size={18} /> Email to customer
               </Button>
               <div className="grid grid-cols-2 gap-3">
-                <Button variant="secondary" onClick={() => business && shareInvoicePDF(invoice, business)} disabled={!business}>
+                <Button variant="secondary" onClick={async () => { if (business) (await import('@/lib/pdf')).shareInvoicePDF(invoice, business); }} disabled={!business}>
                   <Share2 size={18} /> Share
                 </Button>
-                <Button variant="secondary" onClick={() => business && downloadInvoicePDF(invoice, business)} disabled={!business}>
+                <Button variant="secondary" onClick={async () => { if (business) (await import('@/lib/pdf')).downloadInvoicePDF(invoice, business); }} disabled={!business}>
                   <Download size={18} /> Download
                 </Button>
                 <Button
