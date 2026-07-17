@@ -1,6 +1,6 @@
 // Minimal service worker: makes the app installable and caches the
 // app shell for faster loads. Firestore handles its own offline data.
-const CACHE = 'invoice-app-v1';
+const CACHE = 'invoice-app-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
