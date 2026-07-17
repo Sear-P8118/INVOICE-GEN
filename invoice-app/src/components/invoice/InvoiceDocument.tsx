@@ -7,12 +7,62 @@ import {
   ShieldCheck,
   CheckCircle2,
 } from 'lucide-react';
-import { Business, Invoice, daysOverdue } from '@/types';
+import { Business, Invoice, LineItem, daysOverdue } from '@/types';
 import { getBusinessConfig, formatCurrency } from '@/lib/constants';
 
 // A4 at 96dpi
 export const DOC_W = 794;
 export const DOC_H = 1123;
+// Vertical gap between stacked pages in the on-screen preview.
+export const PAGE_GAP = 24;
+
+// ---------- pagination ----------
+// Splits the line items across as many A4 pages as needed. Estimated heights:
+// a row is ~40px plus ~18px for each extra wrapped description line. Page 1
+// loses ~520px to the banner/details/bill-to; continuation pages only lose the
+// banner. The last page must keep ~350px free for totals, payment and notes.
+const ROW_H = 40;
+const WRAP_H = 18;
+const WRAP_CHARS = 55;
+const FIRST_PAGE_ITEM_SPACE = 500;
+const CONT_PAGE_ITEM_SPACE = 800;
+const BOTTOM_BLOCK_SPACE = 360;
+
+function rowHeight(it: LineItem): number {
+  return ROW_H + WRAP_H * Math.floor((it.description || '').length / WRAP_CHARS);
+}
+
+export function paginateItems(invoice: Invoice): LineItem[][] {
+  const pages: LineItem[][] = [];
+  let current: LineItem[] = [];
+  let avail = FIRST_PAGE_ITEM_SPACE;
+
+  for (const it of invoice.lineItems) {
+    const h = rowHeight(it);
+    if (h > avail && current.length > 0) {
+      pages.push(current);
+      current = [];
+      avail = CONT_PAGE_ITEM_SPACE;
+    }
+    current.push(it);
+    avail -= h;
+  }
+  pages.push(current);
+
+  // Make room for the totals/payment block: move trailing items onto a fresh
+  // page until the last page can fit it.
+  if (avail < BOTTOM_BLOCK_SPACE) {
+    const last = pages[pages.length - 1];
+    const spill: LineItem[] = [];
+    while (avail < BOTTOM_BLOCK_SPACE && last.length > 0) {
+      const it = last.pop()!;
+      spill.unshift(it);
+      avail += rowHeight(it);
+    }
+    pages.push(spill);
+  }
+  return pages;
+}
 
 const rgb = (c: [number, number, number]) => `rgb(${c[0]},${c[1]},${c[2]})`;
 const GST_RATE = 0.1;
@@ -50,6 +100,16 @@ interface Props {
   business: Business;
 }
 
+// One rendered page of a (possibly multi-page) document.
+interface PageProps extends Props {
+  items: LineItem[];
+  isFirst: boolean;
+  isLast: boolean;
+  pageNo: number;
+  pageCount: number;
+  startIndex: number; // index of items[0] within invoice.lineItems
+}
+
 const page: React.CSSProperties = {
   width: DOC_W,
   height: DOC_H,
@@ -61,12 +121,51 @@ const page: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
+function PageNoLine({ pageNo, pageCount }: { pageNo: number; pageCount: number }) {
+  if (pageCount <= 1) return null;
+  return (
+    <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4 }}>
+      Page {pageNo} of {pageCount}
+    </div>
+  );
+}
+
+function ContinuedLine({ invoice }: { invoice: Invoice }) {
+  return (
+    <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>
+      {invoice.customerName} · {invoice.invoiceNumber} — continued
+    </div>
+  );
+}
+
 export default function InvoiceDocument({ invoice, business }: Props) {
   const cfg = getBusinessConfig(invoice.businessId);
   if (!cfg) return null;
-  if (cfg.pdf.template === 'bfd') return <BFD invoice={invoice} business={business} />;
-  if (cfg.pdf.template === 'fremantle') return <Fremantle invoice={invoice} business={business} />;
-  return <CBP invoice={invoice} business={business} />;
+  const Template = cfg.pdf.template === 'bfd' ? BFD : cfg.pdf.template === 'fremantle' ? Fremantle : CBP;
+  const pages = paginateItems(invoice);
+  // Index of each page's first item within invoice.lineItems.
+  const starts = pages.reduce<number[]>((acc, items, i) => {
+    acc.push(i === 0 ? 0 : acc[i - 1] + pages[i - 1].length);
+    return acc;
+  }, []);
+  return (
+    <div>
+      {pages.map((items, i) => (
+        <div key={i} data-invoice-page style={{ marginTop: i ? PAGE_GAP : 0 }}>
+          <Template
+            invoice={invoice}
+            business={business}
+            items={items}
+            isFirst={i === 0}
+            isLast={i === pages.length - 1}
+            pageNo={i + 1}
+            pageCount={pages.length}
+            startIndex={starts[i]}
+          />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function ContactRow({ icon: Icon, text, color }: { icon: typeof Phone; text: string; color: string }) {
@@ -114,7 +213,7 @@ function statusColor(status: string) {
 
 // ====================== CAR BATTERY PERTH ======================
 
-function CBP({ invoice, business }: Props) {
+function CBP({ invoice, business, items, isFirst, isLast, pageNo, pageCount, startIndex }: PageProps) {
   const cfg = getBusinessConfig(invoice.businessId)!;
   const navy = rgb(cfg.pdf.band);
   const orange = rgb(cfg.pdf.accent);
@@ -149,7 +248,9 @@ function CBP({ invoice, business }: Props) {
       </div>
 
       <div style={{ position: 'relative', zIndex: 1, padding: '24px 36px 36px' }}>
+        {!isFirst && <ContinuedLine invoice={invoice} />}
         {/* business contact + details card */}
+        {isFirst && (
         <div style={{ display: 'flex', gap: 18, justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div style={{ display: 'grid', gap: 6, paddingTop: 4 }}>
             <ContactRow icon={MapPin} text={business.address} color={orange} />
@@ -178,8 +279,10 @@ function CBP({ invoice, business }: Props) {
             </div>
           </div>
         </div>
+        )}
 
         {/* Bill to */}
+        {isFirst && (
         <div style={{ marginTop: 26, maxWidth: 380 }}>
           <div style={{ display: 'inline-block', background: navy, color: '#fff', fontSize: 12, fontWeight: 800, letterSpacing: 0.8, padding: '6px 14px', borderRadius: 6 }}>
             BILL TO
@@ -193,8 +296,9 @@ function CBP({ invoice, business }: Props) {
             </div>
           </div>
         </div>
+        )}
 
-        {od > 0 && (
+        {isFirst && od > 0 && (
           <div style={{ marginTop: 12, color: '#dc2626', fontWeight: 800, fontSize: 13 }}>
             {od} day{od === 1 ? '' : 's'} overdue
           </div>
@@ -221,12 +325,12 @@ function CBP({ invoice, business }: Props) {
             </tr>
           </thead>
           <tbody>
-            {invoice.lineItems.map((it, i) => {
+            {items.map((it, i) => {
               const p = lineParts(it.quantity, it.unitPrice, gstReg, cfg.pdf.gstInclusive);
               return (
                 <tr key={it.id} style={{ background: i % 2 ? '#f8fafc' : '#fff' }}>
                   <td style={{ textAlign: 'center', padding: '9px 12px', color: orange, fontWeight: 800 }}>
-                    {String(i + 1).padStart(2, '0')}
+                    {String(startIndex + i + 1).padStart(2, '0')}
                   </td>
                   <td style={{ padding: '9px 12px' }}>{it.description}</td>
                   <td style={{ textAlign: 'center', padding: '9px 12px' }}>{it.quantity}</td>
@@ -239,7 +343,15 @@ function CBP({ invoice, business }: Props) {
           </tbody>
         </table>
 
+        {!isLast && (
+          <div style={{ marginTop: 14, fontSize: 11.5, color: '#94a3b8', textAlign: 'right' }}>
+            Continued on next page…
+          </div>
+        )}
+
         {/* Payment + totals */}
+        {isLast && (
+        <>
         <div style={{ display: 'flex', gap: 18, marginTop: 22, alignItems: 'flex-start' }}>
           <div style={{ flex: 1 }}>
             <PaymentBox business={business} invoice={invoice} accent={orange} title="PAYMENT METHOD" />
@@ -271,13 +383,18 @@ function CBP({ invoice, business }: Props) {
           <NotesTerms title="NOTES" accent={orange} body={[invoice.notes || cfg.pdf.footerNote]} />
           <NotesTerms title="TERMS" accent={orange} body={cfg.pdf.terms} />
         </div>
+        </>
+        )}
       </div>
 
       {/* Footer */}
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, textAlign: 'center' }}>
         <div style={{ height: 3, background: orange }} />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', color: orange, fontWeight: 800, fontSize: 13 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 12px 6px', color: orange, fontWeight: 800, fontSize: 13 }}>
           <CheckCircle2 size={16} /> {cfg.pdf.footerNote.toUpperCase()}
+        </div>
+        <div style={{ paddingBottom: 8 }}>
+          <PageNoLine pageNo={pageNo} pageCount={pageCount} />
         </div>
       </div>
     </div>
@@ -286,7 +403,7 @@ function CBP({ invoice, business }: Props) {
 
 // ====================== BATTERY FACTORY DIRECT ======================
 
-function BFD({ invoice, business }: Props) {
+function BFD({ invoice, business, items, isFirst, isLast, pageNo, pageCount }: PageProps) {
   const cfg = getBusinessConfig(invoice.businessId)!;
   const red = rgb(cfg.pdf.accent);
   const gstReg = invoice.gstRegistered;
@@ -318,7 +435,9 @@ function BFD({ invoice, business }: Props) {
       </div>
 
       <div style={{ position: 'relative', zIndex: 1, padding: '24px 40px 40px' }}>
+        {!isFirst && <ContinuedLine invoice={invoice} />}
         {/* business contact + details card */}
+        {isFirst && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div style={{ display: 'grid', gap: 5, paddingTop: 4 }}>
             <ContactRow icon={MapPin} text={business.address} color={red} />
@@ -345,8 +464,10 @@ function BFD({ invoice, business }: Props) {
             </div>
           </div>
         </div>
+        )}
 
         {/* Bill to */}
+        {isFirst && (
         <div style={{ marginTop: 24 }}>
           <span style={{ background: red, color: '#fff', fontSize: 11, fontWeight: 800, letterSpacing: 0.8, padding: '5px 12px', borderRadius: 4 }}>
             BILL TO
@@ -360,6 +481,7 @@ function BFD({ invoice, business }: Props) {
             </div>
           </div>
         </div>
+        )}
 
         {/* Items */}
         <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 20, fontSize: 12.5 }}>
@@ -373,7 +495,7 @@ function BFD({ invoice, business }: Props) {
             </tr>
           </thead>
           <tbody>
-            {invoice.lineItems.map((it) => {
+            {items.map((it) => {
               const p = lineParts(it.quantity, it.unitPrice, gstReg, cfg.pdf.gstInclusive);
               return (
                 <tr key={it.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
@@ -388,7 +510,14 @@ function BFD({ invoice, business }: Props) {
           </tbody>
         </table>
 
+        {!isLast && (
+          <div style={{ marginTop: 14, fontSize: 11.5, color: '#94a3b8', textAlign: 'right' }}>
+            Continued on next page…
+          </div>
+        )}
+
         {/* Totals + left info */}
+        {isLast && (
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 22 }}>
           <div style={{ fontSize: 12.5, color: '#475569' }}>
             <div>
@@ -425,11 +554,13 @@ function BFD({ invoice, business }: Props) {
             )}
           </div>
         </div>
+        )}
       </div>
 
-      <div style={{ position: 'absolute', bottom: 28, left: 0, right: 0, textAlign: 'center' }}>
+      <div style={{ position: 'absolute', bottom: 22, left: 0, right: 0, textAlign: 'center' }}>
         <div style={{ fontWeight: 800, fontSize: 13 }}>{cfg.pdf.footerNote}</div>
         <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 6 }}>{cfg.pdf.terms.join('   •   ')}</div>
+        <PageNoLine pageNo={pageNo} pageCount={pageCount} />
       </div>
     </div>
   );
@@ -437,7 +568,7 @@ function BFD({ invoice, business }: Props) {
 
 // ====================== FREMANTLE BATTERIES ======================
 
-function Fremantle({ invoice, business }: Props) {
+function Fremantle({ invoice, business, items, isFirst, isLast, pageNo, pageCount }: PageProps) {
   const cfg = getBusinessConfig(invoice.businessId)!;
   const red = rgb(cfg.pdf.band);
   const gstReg = invoice.gstRegistered;
@@ -471,7 +602,9 @@ function Fremantle({ invoice, business }: Props) {
       </div>
 
       <div style={{ padding: 40, position: 'relative', zIndex: 1 }}>
+        {!isFirst && <ContinuedLine invoice={invoice} />}
         {/* Detail strip */}
+        {isFirst && (
         <div style={{ display: 'flex', gap: 12, borderBottom: '1px solid #e2e8f0', paddingBottom: 16 }}>
           {strip.map(([k, v]) => (
             <div key={k} style={{ flex: 1 }}>
@@ -480,8 +613,10 @@ function Fremantle({ invoice, business }: Props) {
             </div>
           ))}
         </div>
+        )}
 
         {/* Bill to + summary */}
+        {isFirst && (
         <div style={{ display: 'flex', gap: 30, marginTop: 22 }}>
           <div style={{ flex: 1 }}>
             <div style={{ color: red, fontWeight: 800, fontSize: 12, letterSpacing: 0.5 }}>BILL TO</div>
@@ -510,6 +645,7 @@ function Fremantle({ invoice, business }: Props) {
             </div>
           </div>
         </div>
+        )}
 
         {/* Items */}
         <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 22, fontSize: 12.5 }}>
@@ -523,7 +659,7 @@ function Fremantle({ invoice, business }: Props) {
             </tr>
           </thead>
           <tbody>
-            {invoice.lineItems.map((it) => {
+            {items.map((it) => {
               const p = lineParts(it.quantity, it.unitPrice, gstReg, cfg.pdf.gstInclusive);
               return (
                 <tr key={it.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
@@ -538,7 +674,14 @@ function Fremantle({ invoice, business }: Props) {
           </tbody>
         </table>
 
+        {!isLast && (
+          <div style={{ marginTop: 14, fontSize: 11.5, color: '#94a3b8', textAlign: 'right' }}>
+            Continued on next page…
+          </div>
+        )}
+
         {/* EFT + totals */}
+        {isLast && (
         <div style={{ display: 'flex', gap: 18, marginTop: 22, alignItems: 'flex-start' }}>
           <div style={{ flex: 1 }}>
             <PaymentBox business={business} invoice={invoice} accent={red} title="EFT PAYMENT DETAILS" />
@@ -560,11 +703,13 @@ function Fremantle({ invoice, business }: Props) {
             )}
           </div>
         </div>
+        )}
       </div>
 
-      <div style={{ position: 'absolute', bottom: 30, left: 0, right: 0, textAlign: 'center' }}>
+      <div style={{ position: 'absolute', bottom: 24, left: 0, right: 0, textAlign: 'center' }}>
         <div style={{ fontWeight: 800, fontSize: 13 }}>{cfg.pdf.footerNote}</div>
         <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 6 }}>{cfg.pdf.terms.join('   •   ')}</div>
+        <PageNoLine pageNo={pageNo} pageCount={pageCount} />
       </div>
     </div>
   );

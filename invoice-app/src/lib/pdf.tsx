@@ -6,8 +6,9 @@ import { jsPDF } from 'jspdf';
 import { Business, Invoice } from '@/types';
 import InvoiceDocument, { DOC_W, DOC_H } from '@/components/invoice/InvoiceDocument';
 
-// Render the branded HTML invoice off-screen and capture it as a PNG data URL.
-async function renderInvoicePng(invoice: Invoice, business: Business): Promise<string> {
+// Render the branded HTML invoice off-screen and capture every A4 page as a
+// PNG data URL (long invoices flow onto extra pages).
+async function renderInvoicePngs(invoice: Invoice, business: Business): Promise<string[]> {
   const host = document.createElement('div');
   host.style.cssText = `position:fixed;left:-10000px;top:0;width:${DOC_W}px;pointer-events:none;`;
   document.body.appendChild(host);
@@ -28,11 +29,17 @@ async function renderInvoicePng(invoice: Invoice, business: Business): Promise<s
       )
     );
 
-    const node = host.firstElementChild as HTMLElement;
+    const pages = Array.from(host.querySelectorAll('[data-invoice-page]')).map(
+      (wrap) => wrap.firstElementChild as HTMLElement
+    );
     const opts = { pixelRatio: 2, width: DOC_W, height: DOC_H, backgroundColor: '#ffffff' };
-    // First pass warms up font/image embedding; the second is the clean capture.
-    await toPng(node, opts);
-    return await toPng(node, { ...opts, cacheBust: true });
+    // First pass warms up font/image embedding; then take the clean captures.
+    await toPng(pages[0], opts);
+    const out: string[] = [];
+    for (const node of pages) {
+      out.push(await toPng(node, { ...opts, cacheBust: true }));
+    }
+    return out;
   } finally {
     root.unmount();
     host.remove();
@@ -40,11 +47,14 @@ async function renderInvoicePng(invoice: Invoice, business: Business): Promise<s
 }
 
 export async function buildInvoicePDF(invoice: Invoice, business: Business): Promise<jsPDF> {
-  const png = await renderInvoicePng(invoice, business);
+  const pngs = await renderInvoicePngs(invoice, business);
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const w = doc.internal.pageSize.getWidth();
   const h = doc.internal.pageSize.getHeight();
-  doc.addImage(png, 'PNG', 0, 0, w, h, undefined, 'FAST');
+  pngs.forEach((png, i) => {
+    if (i > 0) doc.addPage();
+    doc.addImage(png, 'PNG', 0, 0, w, h, undefined, 'FAST');
+  });
   return doc;
 }
 
