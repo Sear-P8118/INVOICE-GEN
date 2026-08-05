@@ -10,6 +10,22 @@ import {
 import { auth, isFirebaseConfigured } from '@/lib/firebase';
 import { ALLOWED_EMAILS } from '@/lib/constants';
 
+// Shared-device quick logins that bypass Firebase entirely — plaintext on purpose,
+// this is a private family app, not a public one.
+const LOCAL_ACCOUNTS: Record<string, string> = {
+  sami: 'sami',
+  sear: 'sear',
+};
+const LOCAL_SESSION_KEY = 'invoice-local-user';
+
+type AppUser = User | { email: string };
+
+function readLocalSession(): AppUser | null {
+  if (typeof window === 'undefined') return null;
+  const username = localStorage.getItem(LOCAL_SESSION_KEY);
+  return username ? { email: username } : null;
+}
+
 function isAllowed(email: string | null): boolean {
   if (!email) return false;
   // If no allowlist is configured, fall back to Firebase Auth alone.
@@ -18,11 +34,17 @@ function isAllowed(email: string | null): boolean {
 }
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   // With no Firebase config there is nothing to wait for.
   const [loading, setLoading] = useState(isFirebaseConfigured);
 
   useEffect(() => {
+    const localUser = readLocalSession();
+    if (localUser) {
+      setUser(localUser);
+      setLoading(false);
+      return;
+    }
     if (!isFirebaseConfigured) return;
     return onAuthStateChanged(auth(), (u) => {
       if (u && !isAllowed(u.email)) {
@@ -33,6 +55,14 @@ export function useAuth() {
       }
       setLoading(false);
     });
+  }, []);
+
+  const signInLocal = useCallback((username: string, password: string): boolean => {
+    const key = username.trim().toLowerCase();
+    if (LOCAL_ACCOUNTS[key] !== password) return false;
+    localStorage.setItem(LOCAL_SESSION_KEY, key);
+    setUser({ email: key });
+    return true;
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
@@ -49,7 +79,11 @@ export function useAuth() {
     }
   }, []);
 
-  const signOut = useCallback(() => fbSignOut(auth()), []);
+  const signOut = useCallback(() => {
+    localStorage.removeItem(LOCAL_SESSION_KEY);
+    setUser(null);
+    if (isFirebaseConfigured) fbSignOut(auth());
+  }, []);
 
-  return { user, loading, signIn, signOut };
+  return { user, loading, signIn, signInLocal, signOut };
 }
