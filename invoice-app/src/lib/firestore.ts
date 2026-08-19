@@ -14,8 +14,34 @@ import {
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { Business, Customer, Invoice, Job, LineItem, SavedItem, normalizeStatus } from '@/types';
+import { Business, Customer, Invoice, Job, LineItem, normalizeStatus } from '@/types';
 import { GST_RATE, getBusinessConfig } from './constants';
+
+// Firestore writes only resolve once the server acknowledges them. On a flaky
+// connection (or in the PWA offline) that promise can hang forever, which used
+// to freeze the app on "Adding…" / "Working…" with no way out. The write itself
+// is already durable in the local cache and syncs later, so after a short wait
+// we carry on as if it succeeded — real errors raised inside the window (e.g.
+// permission-denied) still surface.
+const ACK_WAIT_MS = 6000;
+
+function settled<T>(promise: Promise<T>, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ACK_WAIT_MS)),
+  ]);
+}
+
+// For reads/transactions, where carrying on isn't an option: fail loudly
+// instead of spinning forever.
+function withTimeout<T>(promise: Promise<T>, ms = 12000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(Object.assign(new Error('timeout'), { code: 'unavailable' })), ms)
+    ),
+  ]);
+}
 
 // ---------- Business settings ----------
 
@@ -36,6 +62,7 @@ export function defaultBusiness(businessId: string): Business {
     invoicePrefix: config?.invoicePrefix || 'INV',
     nextInvoiceNumber: 1001,
     paymentTermsDays: 14,
+    reviewUrl: '',
     ...config?.defaults,
   };
 }
@@ -58,17 +85,6 @@ export function watchBusiness(businessId: string, cb: (b: Business) => void): Un
 export async function saveBusiness(business: Business): Promise<void> {
   const { id, ...data } = business;
   await setDoc(doc(db(), 'businesses', id), data, { merge: true });
-}
-
-// ---------- Saved item presets (stored on the business record) ----------
-
-export async function getSavedItems(businessId: string): Promise<SavedItem[]> {
-  const biz = await getBusiness(businessId);
-  return biz.savedItems || [];
-}
-
-export async function saveSavedItems(businessId: string, items: SavedItem[]): Promise<void> {
-  await setDoc(doc(db(), 'businesses', businessId), { savedItems: items }, { merge: true });
 }
 
 // ---------- Customers ----------
@@ -120,27 +136,46 @@ export function watchCustomers(businessId: string, cb: (c: Customer[]) => void):
   });
 }
 
+// Looks for an existing contact with the same name + phone. Returns null if the
+// lookup can't complete — better to risk a duplicate (which dedupeCustomers
+// tidies up) than to block the save.
+async function findMatchingCustomer(
+  businessId: string,
+  customer: Pick<Customer, 'name' | 'phone'>
+): Promise<Customer | null> {
+  try {
+    const q = query(collection(db(), 'customers'), where('businessId', '==', businessId));
+    const snap = await withTimeout(getDocs(q));
+    const key = customerKey(customer);
+    const match = snap.docs
+      .map((d) => ({ ...d.data(), id: d.id } as Customer))
+      .find((c) => customerKey(c) === key);
+    return match || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function saveCustomer(
   customer: Omit<Customer, 'id' | 'createdAt'> & { id?: string }
 ): Promise<string> {
   if (customer.id) {
     const { id, ...data } = customer;
-    await updateDoc(doc(db(), 'customers', id), data);
+    await settled(updateDoc(doc(db(), 'customers', id), data), undefined);
     return id;
   }
   // If this person already exists (same name + phone), update them instead of
   // creating a second contact.
-  const existing = await getCustomers(customer.businessId);
-  const match = existing.find((c) => customerKey(c) === customerKey(customer));
+  const match = await findMatchingCustomer(customer.businessId, customer);
   if (match) {
     const { name, email, phone, address } = customer;
-    await updateDoc(doc(db(), 'customers', match.id), { name, email, phone, address });
+    await settled(updateDoc(doc(db(), 'customers', match.id), { name, email, phone, address }), undefined);
     return match.id;
   }
-  const ref = await addDoc(collection(db(), 'customers'), {
-    ...customer,
-    createdAt: new Date().toISOString(),
-  });
+  // Client-generated id: we know the contact's id straight away, so the UI can
+  // move on without waiting for the server round-trip.
+  const ref = doc(collection(db(), 'customers'));
+  await settled(setDoc(ref, { ...customer, createdAt: new Date().toISOString() }), undefined);
   return ref.id;
 }
 
@@ -192,21 +227,24 @@ export async function saveInvoice(
   const now = new Date().toISOString();
   // Strip `id` from the written data — for a new invoice it is undefined,
   // and Firestore rejects any field whose value is undefined.
-  const { id, ...data } = invoice;
+  const { id, ...rest } = invoice;
+  // Firestore rejects undefined values outright, so drop any optional field
+  // that wasn't set (e.g. `mode` on older records).
+  const data = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
   if (id) {
-    await updateDoc(doc(db(), 'invoices', id), { ...data, updatedAt: now });
+    await settled(updateDoc(doc(db(), 'invoices', id), { ...data, updatedAt: now }), undefined);
     return id;
   }
-  const ref = await addDoc(collection(db(), 'invoices'), {
-    ...data,
-    createdAt: now,
-    updatedAt: now,
-  });
+  const ref = doc(collection(db(), 'invoices'));
+  await settled(setDoc(ref, { ...data, createdAt: now, updatedAt: now }), undefined);
   return ref.id;
 }
 
 export async function updateInvoiceStatus(id: string, status: Invoice['status']): Promise<void> {
-  await updateDoc(doc(db(), 'invoices', id), { status, updatedAt: new Date().toISOString() });
+  await settled(
+    updateDoc(doc(db(), 'invoices', id), { status, updatedAt: new Date().toISOString() }),
+    undefined
+  );
 }
 
 // Creates a new Pending invoice from a quote, keeping the quote intact, and
@@ -332,15 +370,18 @@ export async function convertJobToInvoice(job: Job): Promise<string> {
 // Atomically claims the next invoice number for a business so two
 // devices can never issue the same number.
 export async function claimNextInvoiceNumber(businessId: string): Promise<string> {
-  return runTransaction(db(), async (tx) => {
+  // A transaction needs the network — time it out rather than hang the form.
+  return withTimeout(
+    runTransaction(db(), async (tx) => {
     const ref = doc(db(), 'businesses', businessId);
     const snap = await tx.get(ref);
     const data = snap.exists() ? snap.data() : defaultBusiness(businessId);
     const prefix = data.invoicePrefix || getBusinessConfig(businessId)?.invoicePrefix || 'INV';
-    const next = data.nextInvoiceNumber || 1001;
-    tx.set(ref, { nextInvoiceNumber: next + 1 }, { merge: true });
-    return `${prefix}-${String(next).padStart(4, '0')}`;
-  });
+      const next = data.nextInvoiceNumber || 1001;
+      tx.set(ref, { nextInvoiceNumber: next + 1 }, { merge: true });
+      return `${prefix}-${String(next).padStart(4, '0')}`;
+    })
+  );
 }
 
 // ---------- Totals ----------

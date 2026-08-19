@@ -8,7 +8,8 @@ service cloud.firestore {
     function isOwner() {
       return request.auth != null
         && request.auth.token.email.lower() in [
-          'popalholding24@outlook.com'
+          'popalholding24@outlook.com',
+          'carbatteryperth@gmail.com'
         ];
     }
 

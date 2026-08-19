@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, FileText, Users, Settings } from 'lucide-react';
+import { House, FileText, Users, Settings } from 'lucide-react';
 
 // iOS Safari mispositions position:fixed elements while the on-screen keyboard
 // is open, leaving the bar stranded mid-screen after the keyboard closes.
@@ -46,13 +46,14 @@ function useKeyboardOpen(): boolean {
   return open;
 }
 
+/** iOS tab bar: frosted material, hairline top, tinted active tab. */
 export default function BottomNav({ businessId }: { businessId: string }) {
   const pathname = usePathname();
   const keyboardOpen = useKeyboardOpen();
   const base = `/businesses/${businessId}`;
 
   const items = [
-    { href: `${base}/dashboard`, label: 'Home', icon: LayoutDashboard },
+    { href: `${base}/dashboard`, label: 'Home', icon: House },
     { href: `${base}/invoices`, label: 'Invoices', icon: FileText },
     { href: `${base}/customers`, label: 'Customers', icon: Users },
     { href: `${base}/settings`, label: 'Settings', icon: Settings },
@@ -63,7 +64,7 @@ export default function BottomNav({ businessId }: { businessId: string }) {
   if (keyboardOpen) return null;
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white pb-safe lg:hidden">
+    <nav className="material fixed inset-x-0 bottom-0 z-40 border-t-[0.5px] border-hair pb-safe lg:hidden">
       <div className="mx-auto flex max-w-2xl">
         {items.map(({ href, label, icon: Icon }) => {
           const active = pathname.startsWith(href);
@@ -71,9 +72,10 @@ export default function BottomNav({ businessId }: { businessId: string }) {
             <Link
               key={href}
               href={href}
-              className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium ${active ? 'text-slate-900' : 'text-slate-400'}`}
+              className="flex flex-1 flex-col items-center gap-[3px] pt-2 text-[10px] font-medium tracking-[0.01em]"
+              style={{ color: active ? 'var(--tint)' : 'var(--color-mute)' }}
             >
-              <Icon size={22} strokeWidth={active ? 2.4 : 1.8} />
+              <Icon size={25} strokeWidth={active ? 2.2 : 1.8} />
               {label}
             </Link>
           );

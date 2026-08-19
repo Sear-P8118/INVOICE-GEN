@@ -2,8 +2,16 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Trash2, UserPlus, Truck, Wrench, Share2, Save } from 'lucide-react';
-import { Business, Customer, Invoice, InvoiceStatus, LineItem, SavedItem, daysOverdue } from '@/types';
+import { Plus, Trash2, Truck, Wrench, Share2, Clock, Check } from 'lucide-react';
+import {
+  Business,
+  Customer,
+  Invoice,
+  InvoiceMode,
+  InvoiceStatus,
+  LineItem,
+  daysOverdue,
+} from '@/types';
 import {
   calcTotals,
   claimNextInvoiceNumber,
@@ -13,32 +21,29 @@ import {
   saveInvoice,
 } from '@/lib/firestore';
 import { formatCurrency, getBusinessConfig } from '@/lib/constants';
-import { Input, Textarea, Select, Label } from '@/components/ui/Field';
+import { describeSaveError } from '@/lib/errors';
+import { Input, Textarea, FieldGroup } from '@/components/ui/Field';
+import { statusColor } from '@/components/ui/StatusBadge';
 import Button from '@/components/ui/Button';
-import Sheet from '@/components/ui/Sheet';
 import { addDays, format } from 'date-fns';
 
 interface Props {
   businessId: string;
+  mode?: InvoiceMode; // 'fast' (default) = don't save the customer; 'trade' = do
   existing?: Invoice; // edit mode when set
   duplicateFrom?: Invoice; // prefill for duplicates
 }
 
-// The four document types you can create, with their button colours.
-const TYPES: {
-  value: InvoiceStatus;
-  label: string;
-  on: string; // selected
-  off: string; // not selected
-}[] = [
-  { value: 'Paid', label: 'Paid', on: 'bg-emerald-600 text-white shadow-sm', off: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
-  { value: 'Overdue', label: 'Overdue', on: 'bg-red-600 text-white shadow-sm', off: 'bg-red-50 text-red-700 border border-red-200' },
-  { value: 'Pending', label: 'Pending', on: 'bg-amber-500 text-white shadow-sm', off: 'bg-amber-50 text-amber-700 border border-amber-200' },
-  { value: 'Quote', label: 'Quote', on: 'bg-blue-600 text-white shadow-sm', off: 'bg-blue-50 text-blue-700 border border-blue-200' },
+// The four document types you can create.
+const TYPES: { value: InvoiceStatus; label: string }[] = [
+  { value: 'Paid', label: 'Paid' },
+  { value: 'Pending', label: 'Unpaid' },
+  { value: 'Overdue', label: 'Overdue' },
+  { value: 'Quote', label: 'Quote' },
 ];
 
 const TYPE_HINT: Record<string, string> = {
-  Paid: 'Sale already paid — records the date paid.',
+  Paid: 'Already paid — records the date it was paid.',
   Overdue: 'Unpaid past its due date — shows how many days overdue.',
   Pending: 'Awaiting payment — issued now, due later.',
   Quote: 'A priced offer. No payment owed, no due date.',
@@ -56,17 +61,28 @@ const emptyItem = (description = ''): LineItem => ({
 function initialType(source?: Invoice): InvoiceStatus {
   const s = source?.status;
   if (s === 'Paid' || s === 'Overdue' || s === 'Pending' || s === 'Quote') return s;
-  return 'Pending'; // default for new + legacy drafts
+  // Most jobs are paid on the spot, so that's what a new invoice starts as.
+  return 'Paid';
 }
 
-export default function InvoiceForm({ businessId, existing, duplicateFrom }: Props) {
+export default function InvoiceForm({ businessId, mode: modeProp, existing, duplicateFrom }: Props) {
   const router = useRouter();
   const source = existing || duplicateFrom;
   const config = getBusinessConfig(businessId)!;
+  // Resuming a saved-for-later invoice keeps the mode it was started in.
+  const mode: InvoiceMode = modeProp ?? source?.mode ?? 'fast';
+  const isTrade = mode === 'trade';
 
   const [business, setBusiness] = useState<Business | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [customerId, setCustomerId] = useState(source?.customerId || '');
+  // Customer details are typed straight onto the invoice. Only trade invoices
+  // then get filed into the customer list.
+  const [cust, setCust] = useState({
+    name: source?.customerName || '',
+    phone: source?.customerPhone || '',
+    email: source?.customerEmail || '',
+    address: source?.customerAddress || '',
+  });
   const [type, setType] = useState<InvoiceStatus>(initialType(source));
   const [issueDate, setIssueDate] = useState(existing?.issueDate || today());
   const [dueDate, setDueDate] = useState(existing?.dueDate || '');
@@ -76,11 +92,6 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
   const [notes, setNotes] = useState(source?.notes || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-
-  // New-customer sheet
-  const [showNewCustomer, setShowNewCustomer] = useState(false);
-  const [addingCustomer, setAddingCustomer] = useState(false);
-  const [newCust, setNewCust] = useState({ name: '', email: '', phone: '', address: '' });
 
   const needsDue = type === 'Pending' || type === 'Overdue';
 
@@ -96,7 +107,27 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
       }),
     [businessId, existing]
   );
-  useEffect(() => watchCustomers(businessId, setCustomers), [businessId]);
+
+  // Only trade invoices need the saved contacts (for the name suggestions).
+  useEffect(() => {
+    if (!isTrade) return;
+    return watchCustomers(businessId, setCustomers);
+  }, [businessId, isTrade]);
+
+  // Typing a saved trade customer's name fills in the rest of their details.
+  function chooseName(name: string) {
+    setCust((c) => ({ ...c, name }));
+    if (!isTrade) return;
+    const match = customers.find((c) => c.name.toLowerCase() === name.trim().toLowerCase());
+    if (match) {
+      setCust({
+        name: match.name,
+        phone: match.phone || '',
+        email: match.email || '',
+        address: match.address || '',
+      });
+    }
+  }
 
   // Switching to a type that needs a due date fills a sensible default.
   function chooseType(next: InvoiceStatus) {
@@ -120,44 +151,12 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
 
   const addItem = (description = '') => setLineItems((items) => [...items, emptyItem(description)]);
 
-  const savedItems = business?.savedItems ?? [];
-  const addPreset = (it: SavedItem) =>
-    setLineItems((items) => [
-      ...items,
-      {
-        id: crypto.randomUUID(),
-        description: it.description ? `${it.name} — ${it.description}` : it.name,
-        quantity: 1,
-        unitPrice: it.unitPrice,
-      },
-    ]);
-
-  async function handleAddCustomer() {
-    // The in-flight guard stops a double-tap creating the same contact twice.
-    if (!newCust.name.trim() || addingCustomer) return;
-    setAddingCustomer(true);
-    try {
-      const id = await saveCustomer({ ...newCust, businessId });
-      // The live watcher refreshes the list; select the new/reused contact now.
-      setCustomers((c) => {
-        if (c.some((x) => x.id === id)) return c;
-        const created: Customer = { ...newCust, id, businessId, createdAt: new Date().toISOString() };
-        return [...c, created].sort((a, b) => a.name.localeCompare(b.name));
-      });
-      setCustomerId(id);
-      setShowNewCustomer(false);
-      setNewCust({ name: '', email: '', phone: '', address: '' });
-    } finally {
-      setAddingCustomer(false);
-    }
-  }
-
   // Persist the invoice; returns the saved record (with id) or null on failure.
   async function persist(): Promise<{ invoice: Invoice; business: Business } | null> {
     setError('');
-    const customer = customers.find((c) => c.id === customerId);
-    if (!customer) {
-      setError('Please choose a customer.');
+    const name = cust.name.trim();
+    if (!name) {
+      setError('Please enter a customer name.');
       return null;
     }
     const items = lineItems.filter((i) => i.description.trim());
@@ -167,26 +166,43 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
     }
     if (!business) return null;
 
+    // Trade invoices file the customer away for next time. Fast invoices never
+    // touch the customer list.
+    let customerId = existing?.customerId || '';
+    if (isTrade) {
+      try {
+        customerId = await saveCustomer({
+          id: customerId || undefined,
+          businessId,
+          name,
+          phone: cust.phone.trim(),
+          email: cust.email.trim(),
+          address: cust.address.trim(),
+        });
+      } catch {
+        // Filing the contact is a convenience — never block the invoice on it.
+      }
+    }
+
     // Quote = today's date, no due. Paid = the single date, no due.
     const finalIssue = type === 'Quote' ? today() : issueDate;
     const finalDue = needsDue ? dueDate : '';
 
-    const invoiceNumber = existing
-      ? existing.invoiceNumber
-      : await claimNextInvoiceNumber(businessId);
+    // Saved-for-later invoices hold no number until they're finished, so a
+    // parked job never burns an invoice number.
+    const invoiceNumber = existing?.invoiceNumber || (await claimNextInvoiceNumber(businessId));
 
     const totalsNow = calcTotals(items, gstRegistered, gstInclusive);
     const now = new Date().toISOString();
 
-    const id = await saveInvoice({
-      id: existing?.id,
+    const record = {
       invoiceNumber,
       businessId,
-      customerId: customer.id,
-      customerName: customer.name,
-      customerEmail: customer.email,
-      customerPhone: customer.phone,
-      customerAddress: customer.address,
+      customerId,
+      customerName: name,
+      customerEmail: cust.email.trim(),
+      customerPhone: cust.phone.trim(),
+      customerAddress: cust.address.trim(),
       issueDate: finalIssue,
       dueDate: finalDue,
       lineItems: items,
@@ -194,45 +210,56 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
       ...totalsNow,
       status: type,
       notes,
-    });
+      mode,
+    };
+
+    const id = await saveInvoice({ id: existing?.id, ...record });
 
     const invoice: Invoice = {
       id,
-      invoiceNumber,
-      businessId,
-      customerId: customer.id,
-      customerName: customer.name,
-      customerEmail: customer.email,
-      customerPhone: customer.phone,
-      customerAddress: customer.address,
-      issueDate: finalIssue,
-      dueDate: finalDue,
-      lineItems: items,
-      gstRegistered,
-      ...totalsNow,
-      status: type,
-      notes,
+      ...record,
       createdAt: existing?.createdAt || now,
       updatedAt: now,
     };
     return { invoice, business };
   }
 
-  function describeSaveError(e: unknown): string {
-    const err = e as { code?: string; message?: string };
-    switch (err?.code) {
-      case 'permission-denied':
-        return 'The database blocked this save. Your sign-in email needs adding to the Firestore security rules (Firebase console → Firestore → Rules), then re-publish.';
-      case 'unavailable':
-      case 'failed-precondition':
-      case 'deadline-exceeded':
-        return 'Can’t reach the database right now. Check your internet connection and try again.';
-      default:
-        return `Could not save: ${err?.code || err?.message || 'unknown error'}.`;
+  // Parks an unfinished invoice as a Draft: no validation, no invoice number,
+  // and it stays editable from the Invoices list.
+  async function handleSaveForLater() {
+    if (saving) return;
+    setError('');
+    setSaving(true);
+    try {
+      const items = lineItems.filter((i) => i.description.trim());
+      const totalsNow = calcTotals(items, gstRegistered, gstInclusive);
+      await saveInvoice({
+        id: existing?.id,
+        invoiceNumber: existing?.invoiceNumber || '',
+        businessId,
+        customerId: existing?.customerId || '',
+        customerName: cust.name.trim() || 'Unfinished invoice',
+        customerEmail: cust.email.trim(),
+        customerPhone: cust.phone.trim(),
+        customerAddress: cust.address.trim(),
+        issueDate,
+        dueDate: needsDue ? dueDate : '',
+        lineItems: items,
+        gstRegistered,
+        ...totalsNow,
+        status: 'Draft',
+        notes,
+        mode,
+      });
+      router.replace(`/businesses/${businessId}/invoices?status=Draft`);
+    } catch (e) {
+      setError(describeSaveError(e));
+      setSaving(false);
     }
   }
 
-  async function handleSaveAndShare() {
+  // Always saves first; sharing is what happens after.
+  async function handleSendAndSave() {
     setSaving(true);
     let res: Awaited<ReturnType<typeof persist>>;
     try {
@@ -273,148 +300,148 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 px-4 py-4">
-      {/* Document type */}
-      <section>
-        <Label>Type</Label>
-        <div className="grid grid-cols-4 gap-2">
-          {TYPES.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => chooseType(t.value)}
-              className={`rounded-xl py-2.5 text-sm font-bold transition-colors ${
-                type === t.value ? t.on : t.off
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <p className="mt-2 text-xs text-slate-500">{TYPE_HINT[type]}</p>
-      </section>
-
-      {/* Customer */}
-      <section>
-        <div className="flex items-end gap-2">
-          <div className="flex-1">
-            <Select label="Customer" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-              <option value="">Select customer…</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+    <div className="space-y-6 px-4 py-4 lg:px-6">
+      {/* Type — a plain choice list, one tap, no colour soup */}
+      <FieldGroup header="Type" footer={TYPE_HINT[type]}>
+        {TYPES.map((t) => (
           <button
+            key={t.value}
             type="button"
-            onClick={() => setShowNewCustomer(true)}
-            className={`flex h-[50px] w-[50px] items-center justify-center rounded-xl text-white ${config.ui.accent}`}
-            aria-label="Add customer"
+            onClick={() => chooseType(t.value)}
+            className="pressable flex w-full items-center gap-3 px-4 py-3 text-left"
           >
-            <UserPlus size={20} />
+            <span
+              className="h-[10px] w-[10px] shrink-0 rounded-full"
+              style={{ backgroundColor: statusColor(t.value) }}
+            />
+            <span className="flex-1 text-[17px] text-label">{t.label}</span>
+            {type === t.value && (
+              <Check size={20} strokeWidth={2.6} style={{ color: 'var(--tint)' }} />
+            )}
           </button>
-        </div>
-      </section>
+        ))}
+      </FieldGroup>
 
-      {/* Dates — depend on the type */}
-      <section>
-        {type === 'Quote' && (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-            <p className="text-xs font-medium text-slate-500">Quote date</p>
-            <p className="text-base font-semibold text-slate-900">{format(new Date(), 'd MMM yyyy')}</p>
-          </div>
+      {/* Customer — typed straight in, no contact to pick or create */}
+      <FieldGroup
+        header="Customer"
+        footer={
+          isTrade
+            ? 'Saved to your customer list for next time.'
+            : 'One-off job — these details stay on this invoice only.'
+        }
+      >
+        <Input
+          label="Name"
+          value={cust.name}
+          onChange={(e) => chooseName(e.target.value)}
+          placeholder="Required"
+          list={isTrade ? 'trade-customers' : undefined}
+          autoComplete="off"
+        />
+        {isTrade && (
+          <datalist id="trade-customers">
+            {customers.map((c) => (
+              <option key={c.id} value={c.name} />
+            ))}
+          </datalist>
         )}
+        <Input
+          label="Phone"
+          type="tel"
+          inputMode="tel"
+          value={cust.phone}
+          onChange={(e) => setCust({ ...cust, phone: e.target.value })}
+          placeholder="Optional"
+        />
+        <Input
+          label="Email"
+          type="email"
+          inputMode="email"
+          value={cust.email}
+          onChange={(e) => setCust({ ...cust, email: e.target.value })}
+          placeholder="Optional"
+        />
+        <Input
+          label="Address"
+          value={cust.address}
+          onChange={(e) => setCust({ ...cust, address: e.target.value })}
+          placeholder="Optional"
+        />
+      </FieldGroup>
 
-        {type === 'Paid' && (
+      {/* Dates — only the ones this type actually needs */}
+      {type !== 'Quote' && (
+        <FieldGroup
+          header="Dates"
+          footer={
+            type === 'Overdue'
+              ? overdueDays > 0
+                ? `${overdueDays} day${overdueDays === 1 ? '' : 's'} overdue.`
+                : 'Not past due yet — set an earlier due date.'
+              : undefined
+          }
+        >
           <Input
-            label="Date paid"
+            label={type === 'Paid' ? 'Date paid' : 'Issued'}
             type="date"
             value={issueDate}
             onChange={(e) => setIssueDate(e.target.value)}
           />
-        )}
-
-        {needsDue && (
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Issue date" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
-            <Input label="Due date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-          </div>
-        )}
-
-        {type === 'Overdue' && (
-          <p className="mt-2 inline-flex rounded-lg bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700">
-            {overdueDays > 0 ? `${overdueDays} day${overdueDays === 1 ? '' : 's'} overdue` : 'Not past due yet — set an earlier due date'}
-          </p>
-        )}
-      </section>
+          {needsDue && (
+            <Input
+              label="Due"
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+            />
+          )}
+        </FieldGroup>
+      )}
 
       {/* Line items */}
       <section>
-        <Label>Items</Label>
+        <h2 className="mb-2 px-4 text-[13px] uppercase tracking-[0.06em] text-label2">Items</h2>
 
-        {/* Saved-item quick add */}
-        {savedItems.length > 0 ? (
-          <div className="mb-3">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-slate-500">Tap to add</p>
-              <button
-                type="button"
-                onClick={() => router.push(`/businesses/${businessId}/items`)}
-                className={`text-xs font-semibold ${config.ui.accentText}`}
-              >
-                Manage
-              </button>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {savedItems.map((it) => (
+        <div className="space-y-2.5">
+          {lineItems.map((item, index) => (
+            <div key={item.id} className="overflow-hidden rounded-[14px] bg-surface">
+              <div className="flex items-center gap-2 border-b-[0.5px] border-hair px-4 py-2">
+                <span className="text-[13px] text-label2">Item {index + 1}</span>
+                <span className="numeric flex-1 text-right text-[15px] font-semibold text-label">
+                  {formatCurrency((item.quantity || 0) * (item.unitPrice || 0))}
+                </span>
                 <button
-                  key={it.id}
                   type="button"
-                  onClick={() => addPreset(it)}
-                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm active:bg-slate-50"
+                  onClick={() => setLineItems((items) => items.filter((i) => i.id !== item.id))}
+                  disabled={lineItems.length === 1}
+                  className="-mr-1 rounded-lg p-1 text-label3 active:text-neg disabled:opacity-25"
+                  aria-label="Remove item"
                 >
-                  {it.name} · {formatCurrency(it.unitPrice)}
+                  <Trash2 size={17} />
                 </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => router.push(`/businesses/${businessId}/items`)}
-            className={`mb-3 text-xs font-semibold ${config.ui.accentText}`}
-          >
-            + Set up saved items
-          </button>
-        )}
-
-        <div className="space-y-3">
-          {lineItems.map((item) => (
-            <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-3">
+              </div>
               <textarea
-                placeholder="Description (e.g. Century NS70 battery supplied & fitted)"
+                placeholder="What was done? e.g. Century NS70 battery supplied & fitted"
                 value={item.description}
                 onChange={(e) => updateItem(item.id, { description: e.target.value })}
                 rows={2}
-                className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-base placeholder-slate-400 focus:border-slate-500 focus:outline-none"
+                className="w-full resize-none border-b-[0.5px] border-hair bg-transparent px-4 py-3 text-[17px] text-label placeholder-label3 outline-none"
               />
-              <div className="mt-2 flex items-center gap-2">
-                <div className="w-20">
+              <div className="flex items-center">
+                <label className="flex flex-1 items-center gap-2 border-r-[0.5px] border-hair px-4 py-2.5">
+                  <span className="text-[15px] text-label2">Qty</span>
                   <input
                     type="number"
                     inputMode="decimal"
                     min={0}
-                    placeholder="Qty"
                     value={item.quantity || ''}
                     onChange={(e) => updateItem(item.id, { quantity: Number(e.target.value) })}
-                    className="w-full rounded-lg border border-slate-200 px-2 py-2 text-center text-base focus:border-slate-500 focus:outline-none"
+                    className="numeric w-full bg-transparent text-right text-[17px] outline-none"
                   />
-                </div>
-                <span className="text-slate-400">×</span>
-                <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                </label>
+                <label className="flex flex-1 items-center gap-2 px-4 py-2.5">
+                  <span className="text-[15px] text-label2">$</span>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -423,125 +450,89 @@ export default function InvoiceForm({ businessId, existing, duplicateFrom }: Pro
                     placeholder="0.00"
                     value={item.unitPrice || ''}
                     onChange={(e) => updateItem(item.id, { unitPrice: Number(e.target.value) })}
-                    className="w-full rounded-lg border border-slate-200 py-2 pl-7 pr-2 text-base focus:border-slate-500 focus:outline-none"
+                    className="numeric w-full bg-transparent text-right text-[17px] placeholder-label3 outline-none"
                   />
-                </div>
-                <span className="w-20 text-right text-sm font-semibold text-slate-700">
-                  {formatCurrency((item.quantity || 0) * (item.unitPrice || 0))}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setLineItems((items) => items.filter((i) => i.id !== item.id))}
-                  disabled={lineItems.length === 1}
-                  className="rounded-lg p-2 text-slate-400 active:bg-red-50 active:text-red-500 disabled:opacity-30"
-                  aria-label="Remove item"
-                >
-                  <Trash2 size={18} />
-                </button>
+                </label>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Add item + quick adds (all coloured in the brand) */}
-        <button
-          type="button"
-          onClick={() => addItem()}
-          className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed py-3 text-sm font-bold ${config.ui.accentText}`}
-          style={{ borderColor: 'currentColor' }}
-        >
-          <Plus size={18} /> Add item
-        </button>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => addItem('Delivery')}
-            className={`flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white ${config.ui.accent}`}
-          >
-            <Truck size={18} /> Delivery
-          </button>
-          <button
-            type="button"
-            onClick={() => addItem('Installation')}
-            className={`flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white ${config.ui.accent}`}
-          >
-            <Wrench size={18} /> Installation
-          </button>
+        <div className="mt-2.5 grid grid-cols-3 gap-2">
+          <Button variant="secondary" onClick={() => addItem()}>
+            <Plus size={17} /> Item
+          </Button>
+          <Button variant="secondary" onClick={() => addItem('Delivery')}>
+            <Truck size={17} /> Delivery
+          </Button>
+          <Button variant="secondary" onClick={() => addItem('Installation')}>
+            <Wrench size={17} /> Install
+          </Button>
         </div>
       </section>
 
       {/* Totals */}
-      <section className="rounded-xl bg-white p-4 shadow-sm">
-        {gstRegistered ? (
+      <section className="hairline overflow-hidden rounded-[14px] bg-surface">
+        {gstRegistered && (
           <>
-            <div className="flex justify-between py-1 text-sm text-slate-600">
+            <div className="flex justify-between px-4 py-2.5 text-[15px] text-label2">
               <span>Subtotal</span>
-              <span>{formatCurrency(totals.subtotal)}</span>
+              <span className="numeric">{formatCurrency(totals.subtotal)}</span>
             </div>
-            <div className="flex justify-between py-1 text-sm text-slate-600">
+            <div className="flex justify-between px-4 py-2.5 text-[15px] text-label2">
               <span>GST (10%)</span>
-              <span>{formatCurrency(totals.gstAmount)}</span>
-            </div>
-            <div className="mt-1 flex justify-between border-t border-slate-100 pt-2 text-base font-bold text-slate-900">
-              <span>Total</span>
-              <span>{formatCurrency(totals.total)}</span>
+              <span className="numeric">{formatCurrency(totals.gstAmount)}</span>
             </div>
           </>
-        ) : (
-          <div className="flex justify-between text-base font-bold text-slate-900">
-            <span>Total (no GST)</span>
-            <span>{formatCurrency(totals.total)}</span>
-          </div>
         )}
+        <div className="flex items-baseline justify-between px-4 py-3">
+          <span className="text-[17px] font-semibold text-label">
+            Total{gstRegistered ? '' : ' (no GST)'}
+          </span>
+          <span className="numeric text-[22px] font-bold text-label">
+            {formatCurrency(totals.total)}
+          </span>
+        </div>
       </section>
 
-      <Textarea
-        label="Notes (shown on the document)"
-        rows={2}
-        placeholder="e.g. 12 month warranty on all batteries"
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-      />
+      <FieldGroup header="Notes" footer="Shown on the invoice.">
+        <Textarea
+          rows={2}
+          placeholder="e.g. 12 month warranty on all batteries"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </FieldGroup>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      {error && (
+        <p className="rounded-[12px] bg-neg/10 px-4 py-3 text-[15px] text-neg">{error}</p>
+      )}
 
       {/* Actions */}
-      <div className="space-y-2">
-        <Button
-          full
-          disabled={saving || !business}
-          onClick={handleSaveAndShare}
-          className={`min-h-13 ${config.ui.accent} text-white`}
-        >
-          <Share2 size={18} /> {saving ? 'Working…' : 'Save & Share'}
+      <div className="space-y-2 pt-1">
+        <Button full large disabled={saving || !business} onClick={handleSendAndSave}>
+          <Share2 size={18} /> {saving ? 'Working…' : 'Send & Save'}
         </Button>
-        <button
-          type="button"
-          disabled={saving || !business}
-          onClick={handleSaveOnly}
-          className="flex w-full items-center justify-center gap-2 py-2 text-sm font-semibold text-slate-500 disabled:opacity-40"
-        >
-          <Save size={16} /> Save without sharing
-        </button>
+        <Button full variant="secondary" disabled={saving || !business} onClick={handleSaveOnly}>
+          Save without sending
+        </Button>
+        <Button full variant="plain" disabled={saving} onClick={handleSaveForLater}>
+          <Clock size={17} /> Save for later
+        </Button>
       </div>
 
-      {/* New customer sheet */}
-      <Sheet open={showNewCustomer} onClose={() => setShowNewCustomer(false)} title="New Customer">
-        <div className="space-y-4">
-          <Input label="Name" value={newCust.name} onChange={(e) => setNewCust({ ...newCust, name: e.target.value })} placeholder="Customer or company name" />
-          <Input label="Phone" type="tel" inputMode="tel" value={newCust.phone} onChange={(e) => setNewCust({ ...newCust, phone: e.target.value })} />
-          <Input label="Email" type="email" inputMode="email" value={newCust.email} onChange={(e) => setNewCust({ ...newCust, email: e.target.value })} />
-          <Textarea label="Address" rows={2} value={newCust.address} onChange={(e) => setNewCust({ ...newCust, address: e.target.value })} />
-          <Button
-            full
-            onClick={handleAddCustomer}
-            disabled={!newCust.name.trim() || addingCustomer}
-            className={`${config.ui.accent} text-white`}
-          >
-            {addingCustomer ? 'Adding…' : 'Add Customer'}
-          </Button>
-        </div>
-      </Sheet>
+      {/* The same action, always within reach down the side of a long form */}
+      <button
+        type="button"
+        onClick={handleSaveForLater}
+        disabled={saving}
+        className="material fixed right-0 top-1/2 z-30 flex w-[52px] -translate-y-1/2 flex-col items-center gap-1 rounded-l-[12px] border-[0.5px] border-r-0 border-hair py-3 text-[10px] font-semibold leading-tight text-[var(--tint)] shadow-lg active:opacity-60 disabled:opacity-40 lg:hidden"
+      >
+        <Clock size={17} />
+        Save
+        <br />
+        for later
+      </button>
     </div>
   );
 }

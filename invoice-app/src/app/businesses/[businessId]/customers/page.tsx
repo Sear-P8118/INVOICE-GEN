@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Plus, Search, Phone, Mail, Trash2, Pencil, Users } from 'lucide-react';
-import TopBar from '@/components/ui/TopBar';
+import { Plus, Search, Users, Trash2 } from 'lucide-react';
+import TopBar, { NavButton } from '@/components/ui/TopBar';
 import Sheet from '@/components/ui/Sheet';
 import Button from '@/components/ui/Button';
-import { Input, Textarea } from '@/components/ui/Field';
+import { Input, Textarea, FieldGroup } from '@/components/ui/Field';
+import { List, Row, Empty } from '@/components/ui/List';
 import { watchCustomers, saveCustomer, deleteCustomer } from '@/lib/firestore';
 import { Customer } from '@/types';
 
@@ -37,7 +38,11 @@ export default function CustomersPage() {
 
   function openEditor(target: Customer | 'new') {
     setEditing(target);
-    setForm(target === 'new' ? blank : { name: target.name, email: target.email, phone: target.phone, address: target.address });
+    setForm(
+      target === 'new'
+        ? blank
+        : { name: target.name, email: target.email, phone: target.phone, address: target.address }
+    );
   }
 
   async function handleSave() {
@@ -66,110 +71,128 @@ export default function CustomersPage() {
   }
 
   return (
-    <div>
+    <div className="pb-8">
       <TopBar
         title="Customers"
+        large
+        subtitle="Trade businesses and repeat customers"
         right={
-          <button
-            onClick={() => openEditor('new')}
-            className="rounded-xl bg-slate-900 p-2 text-white active:bg-slate-700"
-            aria-label="Add customer"
-          >
-            <Plus size={20} />
-          </button>
+          <NavButton onClick={() => openEditor('new')} label="Add customer">
+            <Plus size={19} strokeWidth={2.4} />
+          </NavButton>
         }
       />
 
-      <div className="px-4 py-3">
+      <div className="space-y-4 px-4 pt-3 lg:px-6">
         <div className="relative">
-          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={17} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-label3" />
           <input
             type="search"
-            placeholder="Search customers…"
+            placeholder="Search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-base placeholder-slate-400 focus:border-slate-500 focus:outline-none"
+            className="w-full rounded-[10px] bg-fill py-2 pl-8 pr-3 text-[17px] text-label placeholder-label3 outline-none"
           />
         </div>
 
-        <div className="mt-4 space-y-2.5">
-          {!filtered && <p className="py-10 text-center text-sm text-slate-400">Loading…</p>}
+        <List>
+          {!filtered && <p className="px-4 py-10 text-center text-[15px] text-label3">Loading…</p>}
           {filtered && filtered.length === 0 && (
-            <div className="rounded-2xl border border-slate-100 bg-white/70 py-12 text-center shadow-sm ring-1 ring-slate-100">
-              <Users className="mx-auto mb-2 text-slate-300" size={34} strokeWidth={1.6} />
-              <p className="text-sm font-semibold text-slate-600">
-                {customers?.length === 0 ? 'No customers yet' : 'No matches'}
-              </p>
-              <p className="mt-0.5 text-xs text-slate-400">
-                {customers?.length === 0 ? 'Tap + to add your first one.' : 'Try a different search.'}
-              </p>
-            </div>
+            <Empty
+              icon={<Users size={38} strokeWidth={1.5} />}
+              title={customers?.length === 0 ? 'No customers yet' : 'No matches'}
+              hint={
+                customers?.length === 0
+                  ? 'Trade customers are added automatically when you use Invoice Plus Trade Business.'
+                  : 'Try a different search.'
+              }
+            />
           )}
           {filtered?.map((c) => (
-            <div key={c.id} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm ring-1 ring-slate-100/70">
-              <div className="flex items-start justify-between gap-2">
-                <p className="font-semibold text-slate-900">{c.name}</p>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => openEditor(c)}
-                    className="rounded-lg p-1.5 text-slate-400 active:bg-slate-100"
-                    aria-label="Edit"
-                  >
-                    <Pencil size={16} />
-                  </button>
-                  <button
-                    onClick={() => setDeleting(c)}
-                    className="rounded-lg p-1.5 text-slate-400 active:bg-red-50 active:text-red-500"
-                    aria-label="Delete"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-              <div className="mt-1.5 space-y-1 text-sm text-slate-500">
-                {c.phone && (
-                  <a href={`tel:${c.phone}`} className="flex items-center gap-2">
-                    <Phone size={14} /> {c.phone}
-                  </a>
-                )}
-                {c.email && (
-                  <a href={`mailto:${c.email}`} className="flex items-center gap-2">
-                    <Mail size={14} /> {c.email}
-                  </a>
-                )}
-                {c.address && <p className="text-xs text-slate-400">{c.address}</p>}
-              </div>
-            </div>
+            <Row
+              key={c.id}
+              onClick={() => openEditor(c)}
+              title={c.name}
+              subtitle={[c.phone, c.email].filter(Boolean).join(' · ') || 'No contact details'}
+            />
           ))}
-        </div>
+        </List>
       </div>
 
+      {/* Editor */}
       <Sheet
         open={editing !== null}
         onClose={() => setEditing(null)}
         title={editing === 'new' ? 'New Customer' : 'Edit Customer'}
+        action={
+          <button
+            onClick={handleSave}
+            disabled={busy || !form.name.trim()}
+            className="text-[17px] font-semibold text-[var(--tint)] disabled:opacity-35"
+          >
+            {busy ? 'Saving…' : 'Done'}
+          </button>
+        }
       >
-        <div className="space-y-4">
-          <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Customer or company name" />
-          <Input label="Phone" type="tel" inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          <Input label="Email" type="email" inputMode="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Textarea label="Address" rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-          <Button full onClick={handleSave} disabled={busy || !form.name.trim()}>
-            {busy ? 'Saving…' : 'Save Customer'}
-          </Button>
+        <div className="space-y-5 pt-1">
+          <FieldGroup>
+            <Input
+              label="Name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="Required"
+            />
+            <Input
+              label="Phone"
+              type="tel"
+              inputMode="tel"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
+            <Input
+              label="Email"
+              type="email"
+              inputMode="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+            <Textarea
+              label="Address"
+              rows={2}
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+            />
+          </FieldGroup>
+
+          {editing !== 'new' && editing && (
+            <List>
+              <Row
+                onClick={() => {
+                  const target = editing;
+                  setEditing(null);
+                  setDeleting(target);
+                }}
+                icon={<Trash2 size={17} />}
+                iconColor="var(--color-neg)"
+                title="Delete customer"
+                destructive
+                chevron={false}
+              />
+            </List>
+          )}
         </div>
       </Sheet>
 
       <Sheet open={deleting !== null} onClose={() => setDeleting(null)} title="Delete customer?">
-        <p className="text-sm text-slate-600">
+        <p className="px-1 text-[15px] leading-snug text-label2">
           {deleting?.name} will be removed. Existing invoices keep their customer details.
         </p>
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <Button variant="secondary" onClick={() => setDeleting(null)}>
-            Cancel
+        <div className="mt-5 space-y-2">
+          <Button full large variant="danger" onClick={handleDelete} disabled={busy}>
+            {busy ? 'Deleting…' : 'Delete customer'}
           </Button>
-          <Button variant="danger" onClick={handleDelete} disabled={busy}>
-            {busy ? 'Deleting…' : 'Delete'}
+          <Button full variant="secondary" onClick={() => setDeleting(null)}>
+            Cancel
           </Button>
         </div>
       </Sheet>

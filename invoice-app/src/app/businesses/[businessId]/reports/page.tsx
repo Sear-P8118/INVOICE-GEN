@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Download } from 'lucide-react';
 import TopBar from '@/components/ui/TopBar';
+import Button from '@/components/ui/Button';
+import Segmented from '@/components/ui/Segmented';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { getInvoices } from '@/lib/firestore';
 import { formatCurrency, getBusinessConfig } from '@/lib/constants';
@@ -45,44 +47,46 @@ export default function ReportsPage() {
   ];
 
   return (
-    <div>
-      <TopBar title="Reports" />
+    <div className="pb-8">
+      <TopBar title="Reports" large back backLabel="Settings" />
 
-      <div className="space-y-5 px-4 py-4 lg:px-6">
+      <div className="space-y-5 px-4 pt-3 lg:px-6">
         {/* Date range */}
-        <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm ring-1 ring-slate-100/70">
-          <div className="flex flex-wrap gap-2">
-            {presets.map((p) => {
-              const active = p.from === from && p.to === to;
-              return (
-                <button
-                  key={p.label}
-                  onClick={() => {
-                    setFrom(p.from);
-                    setTo(p.to);
-                  }}
-                  className={`rounded-full px-3.5 py-1.5 text-sm font-semibold ${
-                    active ? `${config.ui.accent} text-white` : 'border border-slate-200 bg-white text-slate-600'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <label className="text-xs font-medium text-slate-500">
-              From
-              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-base focus:border-slate-500 focus:outline-none" />
+        <div className="space-y-3">
+          <Segmented
+            options={presets.map((p) => ({ value: p.label, label: p.label }))}
+            value={presets.find((p) => p.from === from && p.to === to)?.label ?? ''}
+            onChange={(label) => {
+              const p = presets.find((x) => x.label === label);
+              if (p) {
+                setFrom(p.from);
+                setTo(p.to);
+              }
+            }}
+          />
+          <div className="hairline overflow-hidden rounded-[14px] bg-surface">
+            <label className="flex items-center gap-3 px-4 py-2.5">
+              <span className="w-[7.5rem] text-[17px] text-label">From</span>
+              <input
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                className="numeric w-full bg-transparent text-right text-[17px] outline-none"
+              />
             </label>
-            <label className="text-xs font-medium text-slate-500">
-              To
-              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-base focus:border-slate-500 focus:outline-none" />
+            <label className="flex items-center gap-3 px-4 py-2.5">
+              <span className="w-[7.5rem] text-[17px] text-label">To</span>
+              <input
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                className="numeric w-full bg-transparent text-right text-[17px] outline-none"
+              />
             </label>
           </div>
         </div>
 
-        {!summary && <p className="py-10 text-center text-sm text-slate-400">Loading…</p>}
+        {!summary && <p className="py-10 text-center text-[15px] text-label3">Loading…</p>}
 
         {summary && (
           <>
@@ -100,19 +104,15 @@ export default function ReportsPage() {
               <Stat label="Overdue" value={formatCurrency(summary.overdue)} tone="red" />
             </div>
 
-            <button
-              onClick={exportCsv}
-              disabled={rows.length === 0}
-              className={`flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-bold text-white shadow-md ${config.ui.accent} disabled:opacity-40`}
-            >
+            <Button full large onClick={exportCsv} disabled={rows.length === 0}>
               <Download size={18} /> Export CSV for accountant
-            </button>
+            </Button>
 
             {/* Desktop table */}
-            <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm ring-1 ring-slate-100/70 lg:block">
+            <div className="hidden overflow-hidden rounded-[14px] bg-surface lg:block">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+                  <tr className="bg-group text-left text-[12px] font-semibold uppercase tracking-[0.05em] text-label2">
                     <th className="px-4 py-3">Invoice</th>
                     <th className="px-4 py-3">Date</th>
                     <th className="px-4 py-3">Customer</th>
@@ -122,28 +122,28 @@ export default function ReportsPage() {
                     <th className="px-4 py-3 text-right">Total</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y-[0.5px] divide-hair">
                   {rows.map((i) => (
                     <tr key={i.id}>
-                      <td className="px-4 py-2.5 font-medium text-slate-900">{i.invoiceNumber}</td>
-                      <td className="px-4 py-2.5 text-slate-500">{i.issueDate}</td>
-                      <td className="px-4 py-2.5 text-slate-700">{i.customerName}</td>
+                      <td className="px-4 py-2.5 font-medium text-label">{i.invoiceNumber}</td>
+                      <td className="px-4 py-2.5 text-label2">{i.issueDate}</td>
+                      <td className="px-4 py-2.5 text-label">{i.customerName}</td>
                       <td className="px-4 py-2.5"><StatusBadge status={effectiveStatus(i)} /></td>
-                      <td className="px-4 py-2.5 text-right text-slate-600">{formatCurrency(i.subtotal)}</td>
-                      <td className="px-4 py-2.5 text-right text-slate-600">{formatCurrency(i.gstAmount)}</td>
-                      <td className="px-4 py-2.5 text-right font-semibold text-slate-900">{formatCurrency(i.total)}</td>
+                      <td className="px-4 py-2.5 text-right text-label2">{formatCurrency(i.subtotal)}</td>
+                      <td className="px-4 py-2.5 text-right text-label2">{formatCurrency(i.gstAmount)}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-label">{formatCurrency(i.total)}</td>
                     </tr>
                   ))}
                   {rows.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-10 text-center text-slate-400">No invoices in this period.</td>
+                      <td colSpan={7} className="px-4 py-10 text-center text-label3">No invoices in this period.</td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
 
-            <p className="text-center text-xs text-slate-400">
+            <p className="px-4 text-center text-[13px] leading-snug text-label3">
               Australian financial year runs 1 July – 30 June. Quotes and drafts are excluded. GST is the portion already included in each total.
             </p>
           </>
@@ -166,12 +166,24 @@ function Stat({
   big?: boolean;
   tone?: 'emerald' | 'amber' | 'red';
 }) {
-  const toneText = tone === 'emerald' ? 'text-emerald-600' : tone === 'amber' ? 'text-amber-600' : tone === 'red' ? 'text-red-600' : 'text-slate-900';
+  const color =
+    tone === 'emerald'
+      ? 'var(--color-pos)'
+      : tone === 'amber'
+        ? 'var(--color-warn)'
+        : tone === 'red'
+          ? 'var(--color-neg)'
+          : 'var(--color-label)';
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm ring-1 ring-slate-100/70">
-      <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className={`mt-1 font-bold ${big ? 'text-2xl' : 'text-xl'} ${toneText}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-slate-400">{sub}</p>}
+    <div className="rounded-[14px] bg-surface p-4">
+      <p className="text-[13px] text-label2">{label}</p>
+      <p
+        className={`numeric mt-1 font-bold leading-none ${big ? 'text-[26px]' : 'text-[20px]'}`}
+        style={{ color }}
+      >
+        {value}
+      </p>
+      {sub && <p className="mt-1.5 text-[13px] text-label3">{sub}</p>}
     </div>
   );
 }

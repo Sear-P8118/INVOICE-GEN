@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import TopBar from '@/components/ui/TopBar';
 import InvoiceForm from '@/components/invoice/InvoiceForm';
 import { getInvoice } from '@/lib/firestore';
-import { Invoice } from '@/types';
+import { Invoice, InvoiceMode } from '@/types';
 
 export default function NewInvoicePage() {
   return (
@@ -19,6 +19,7 @@ function NewInvoiceInner() {
   const { businessId } = useParams<{ businessId: string }>();
   const searchParams = useSearchParams();
   const duplicateId = searchParams.get('duplicate');
+  const mode: InvoiceMode = searchParams.get('mode') === 'trade' ? 'trade' : 'fast';
   const [duplicateFrom, setDuplicateFrom] = useState<Invoice | undefined>();
   const [ready, setReady] = useState(!duplicateId);
 
@@ -31,9 +32,18 @@ function NewInvoiceInner() {
 
   return (
     <div>
-      <TopBar title={duplicateId ? 'Duplicate Invoice' : 'New Invoice'} back={`/businesses/${businessId}/invoices`} />
+      <TopBar
+        title={
+          duplicateId
+            ? 'Duplicate Invoice'
+            : mode === 'trade'
+              ? 'Invoice Plus Trade Business'
+              : 'Create Fast Invoice'
+        }
+        back={`/businesses/${businessId}/invoices`}
+      />
       {ready ? (
-        <InvoiceForm businessId={businessId} duplicateFrom={duplicateFrom} />
+        <InvoiceForm businessId={businessId} mode={mode} duplicateFrom={duplicateFrom} />
       ) : (
         <p className="py-10 text-center text-sm text-slate-400">Loading…</p>
       )}

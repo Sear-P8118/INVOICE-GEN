@@ -10,12 +10,10 @@ import {
 import { auth, isFirebaseConfigured } from '@/lib/firebase';
 import { ALLOWED_EMAILS } from '@/lib/constants';
 
-// Shared-device quick logins that bypass Firebase entirely — plaintext on purpose,
-// this is a private family app, not a public one.
-const LOCAL_ACCOUNTS: Record<string, string> = {
-  sami: 'sami',
-  sear: 'sear',
-};
+// Quick logins that bypassed Firebase entirely. Deliberately empty now: a local
+// session can't read or write anything (Firestore refuses it), so it only ever
+// looked like a working login. Sign in with a real email instead.
+const LOCAL_ACCOUNTS: Record<string, string> = {};
 const LOCAL_SESSION_KEY = 'invoice-local-user';
 
 type AppUser = User | { email: string };
@@ -85,5 +83,10 @@ export function useAuth() {
     if (isFirebaseConfigured) fbSignOut(auth());
   }, []);
 
-  return { user, loading, signIn, signInLocal, signOut };
+  // A quick-login session never authenticates with Firebase, so every read and
+  // write is refused with permission-denied. Screens use this to say so plainly
+  // instead of sitting there empty.
+  const isLocalSession = user !== null && !('uid' in user);
+
+  return { user, loading, isLocalSession, signIn, signInLocal, signOut };
 }

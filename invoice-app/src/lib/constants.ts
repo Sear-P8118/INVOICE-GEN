@@ -26,6 +26,12 @@ export interface BusinessConfig {
     accent: string;
     /** Tailwind text class for accent text. */
     accentText: string;
+    /** The business's colour as a raw hex value. Drives --tint: nav bar, tab
+     *  bar, links, chevrons — the app's "voice". */
+    tint: string;
+    /** Optional second colour for the main action buttons (--tint2). Only Car
+     *  Battery Perth uses it: blue app, orange buttons. Defaults to `tint`. */
+    tint2?: string;
   };
   pdf: {
     /** Which PDF template renderer to use. */
@@ -58,6 +64,8 @@ export const BUSINESSES: BusinessConfig[] = [
       gradient: 'from-[#1E3A5F] to-[#142840]',
       accent: 'bg-[#FF6B35] active:bg-[#e85d2a]',
       accentText: 'text-[#FF6B35]',
+      tint: '#1E5FA8', // brand blue — a blue-and-white app
+      tint2: '#FF6B35', // brand orange, for the action buttons
     },
     pdf: {
       template: 'cbp',
@@ -98,6 +106,7 @@ export const BUSINESSES: BusinessConfig[] = [
       gradient: 'from-zinc-900 via-zinc-800 to-zinc-900',
       accent: 'bg-red-600 active:bg-red-700',
       accentText: 'text-red-500',
+      tint: '#DC2626', // brand red
     },
     pdf: {
       template: 'bfd',
@@ -120,6 +129,7 @@ export const BUSINESSES: BusinessConfig[] = [
       email: 'admin@batteryfactorydirect.com.au',
       address: 'Unit 11/95 Kelvin Rd, Maddington',
       accountName: 'Battery Factory Direct',
+      reviewUrl: 'https://g.page/r/CdjVYtLHyZYlEBM/review',
       bsb: '036-224',
       accountNumber: '574315',
       gstRegistered: true,
@@ -137,6 +147,7 @@ export const BUSINESSES: BusinessConfig[] = [
       gradient: 'from-[#e11b22] to-[#b3151b]',
       accent: 'bg-[#e11b22] active:bg-[#c4181e]',
       accentText: 'text-[#e11b22]',
+      tint: '#E11B22',
     },
     pdf: {
       template: 'fremantle',

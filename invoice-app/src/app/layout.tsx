@@ -1,9 +1,6 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
 import ServiceWorkerRegister from '@/components/ServiceWorkerRegister';
-
-const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Battery Invoices',
@@ -19,19 +16,18 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0f172a',
+  themeColor: '#f2f2f7',
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 1, // stops iOS zooming when a field is focused
   viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body
-        suppressHydrationWarning
-        className={`${inter.className} min-h-dvh text-slate-900 antialiased`}
-      >
+      {/* The font comes from --font-sans: real SF on Apple devices. */}
+      <body suppressHydrationWarning className="min-h-dvh bg-group font-sans text-label antialiased">
         {children}
         <ServiceWorkerRegister />
       </body>

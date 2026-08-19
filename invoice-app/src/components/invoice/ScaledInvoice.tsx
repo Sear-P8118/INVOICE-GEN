@@ -27,7 +27,7 @@ export default function ScaledInvoice({ invoice, business }: { invoice: Invoice;
     <div
       ref={ref}
       style={{ width: '100%', height: scale ? fullHeight * scale : undefined, overflow: 'hidden', borderRadius: 14 }}
-      className="bg-slate-100 shadow-md ring-1 ring-slate-200"
+      className="bg-white shadow-[0_2px_12px_rgba(0,0,0,0.08)] ring-[0.5px] ring-hair"
     >
       {scale > 0 && (
         <div style={{ width: DOC_W, height: fullHeight, transform: `scale(${scale})`, transformOrigin: 'top left' }}>

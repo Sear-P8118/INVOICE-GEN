@@ -1,25 +1,140 @@
 @import "tailwindcss";
 
-.pb-safe {
-  padding-bottom: max(8px, env(safe-area-inset-bottom));
+/* ---------------------------------------------------------------------------
+   Apple-style design tokens.
+
+   Colours are the iOS system palette (light appearance). Anything brand-specific
+   comes through --tint, which the business layout sets per business, so one set
+   of components picks up each company's colour automatically.
+   --------------------------------------------------------------------------- */
+@theme {
+  /* Text */
+  --color-label: #000000;
+  --color-label2: #6c6c70; /* secondaryLabel */
+  --color-label3: #a1a1a6; /* tertiaryLabel */
+
+  /* Surfaces */
+  --color-group: #f2f2f7; /* systemGroupedBackground */
+  --color-surface: #ffffff; /* card / grouped cell */
+  --color-fill: #78788029; /* systemFill, for segmented tracks & chips */
+  --color-hair: #d8d8dc; /* separator */
+
+  /* System colours */
+  --color-tint: #007aff;
+  --color-pos: #34c759; /* green  — paid */
+  --color-neg: #ff3b30; /* red    — overdue */
+  --color-warn: #ff9500; /* orange — pending */
+  --color-info: #007aff; /* blue   — quote */
+  --color-mute: #8e8e93; /* gray   — saved / draft */
+
+  /* SF on Apple devices, closest match everywhere else. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Helvetica Neue", "Segoe UI", Roboto, sans-serif;
+}
+
+:root {
+  /* Overridden per business; the default keeps standalone pages (login, home) sane.
+     --tint  = the app's voice (nav, tab bar, links)
+     --tint2 = the main action buttons, which only Car Battery Perth sets apart */
+  --tint: #007aff;
+  --tint2: #007aff;
+}
+
+html {
+  background-color: var(--color-group);
+}
+
+body {
+  background-color: var(--color-group);
+  color: var(--color-label);
+  overscroll-behavior-y: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 * {
   -webkit-tap-highlight-color: transparent;
 }
 
-body {
-  overscroll-behavior-y: none;
-  -webkit-font-smoothing: antialiased;
-  /* Soft, lightly-tinted backdrop so white cards lift off the page */
-  background-color: #f3f6fb;
-  background-image:
-    radial-gradient(1100px 620px at 100% -8%, rgba(59, 130, 246, 0.08), transparent 60%),
-    radial-gradient(900px 600px at -10% 108%, rgba(99, 102, 241, 0.06), transparent 60%);
-  /* no background-attachment: fixed — it causes scroll jank on iOS */
+/* Apple sets large text tighter and small text looser. */
+.title-lg {
+  font-size: 34px;
+  line-height: 1.06;
+  font-weight: 700;
+  letter-spacing: -0.026em;
+}
+.title-md {
+  font-size: 22px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.021em;
+}
+.numeric {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
-/* The app is always light — invoices are paper-white documents. */
+/* Date inputs render their own internal layout, so right-aligning the field
+   isn't enough — the value itself has to be pushed right too. */
+input[type="date"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: right;
+}
+
+/* Safe areas */
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+.pb-safe {
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
+/* Hairline separator that starts at the content, iOS inset-list style. */
+.hairline > * + * {
+  border-top: 0.5px solid var(--color-hair);
+}
+
+/* Press feedback: iOS cells dim rather than change colour abruptly. */
+.pressable {
+  transition: background-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+}
+.pressable:active {
+  background-color: #00000008;
+}
+.springy:active {
+  transform: scale(0.97);
+}
+
+/* Frosted material used by the nav and tab bars. */
+.material {
+  background-color: rgba(249, 249, 249, 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* Sheets rise from the bottom the way iOS presents them. */
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.sheet-panel {
+  animation: sheet-up 0.34s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.sheet-scrim {
+  animation: fade-in 0.28s ease-out both;
+}
 
 /* ---------- Birthday celebration ---------- */
 @keyframes bday-pop {
@@ -45,11 +160,11 @@ body {
   position: absolute;
   top: 0;
   will-change: transform;
-  /* the full animation (incl. duration) is set inline per piece */
 }
 
 @media (prefers-reduced-motion: reduce) {
   .bday-overlay, .bday-card { animation: none; }
   .bday-glow { animation: none; opacity: 0.6; }
   .bday-confetti-piece { display: none !important; }
+  .sheet-panel, .sheet-scrim { animation: none; }
 }

@@ -1,10 +1,3 @@
-export interface SavedItem {
-  id: string;
-  name: string;
-  description: string;
-  unitPrice: number;
-}
-
 // A fast end-of-job note Dad logs now and invoices later.
 export interface Job {
   id: string;
@@ -41,7 +34,8 @@ export interface Business {
   invoicePrefix: string;
   nextInvoiceNumber: number;
   paymentTermsDays: number;
-  savedItems?: SavedItem[]; // tap-to-add product presets, per business
+  /** Google review link. Until it's set, the review ask stays switched off. */
+  reviewUrl?: string;
 }
 
 export interface Customer {
@@ -61,9 +55,16 @@ export interface LineItem {
   unitPrice: number;
 }
 
-// 'Draft' is legacy (kept so old records + their badge still render); we no longer
-// create drafts. 'Quote' is a non-invoice document type that shares this field.
+// 'Draft' is an invoice started but not finished — the "Save for later" button
+// parks it here, with no invoice number claimed until it is finished properly.
+// 'Quote' is a non-invoice document type that shares this field.
 export type InvoiceStatus = 'Draft' | 'Pending' | 'Paid' | 'Overdue' | 'Quote';
+
+// How an invoice was created:
+//   fast  — Create Fast Invoice: one-off customer, NOT added to the customer list.
+//   trade — Invoice Plus Trade Business: a repeat/trade customer whose details
+//           are saved to the customer list for next time.
+export type InvoiceMode = 'fast' | 'trade';
 
 // The types you can pick when creating, in the order shown in the picker.
 export const INVOICE_STATUSES: InvoiceStatus[] = ['Pending', 'Paid', 'Overdue', 'Quote'];
@@ -123,4 +124,5 @@ export interface Invoice {
   createdAt: string;
   updatedAt: string;
   convertedInvoiceId?: string; // set on a Quote once it has been converted to an invoice
+  mode?: InvoiceMode; // how it was created — see InvoiceMode
 }
