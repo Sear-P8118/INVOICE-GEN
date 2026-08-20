@@ -6,11 +6,9 @@ import AuthGuard from '@/components/AuthGuard';
 import BottomNav from '@/components/ui/BottomNav';
 import Sidebar from '@/components/ui/Sidebar';
 import { getBusinessConfig } from '@/lib/constants';
-import { useAuth } from '@/hooks/useAuth';
 
 export default function BusinessLayout({ children }: { children: ReactNode }) {
   const { businessId } = useParams<{ businessId: string }>();
-  const { isLocalSession } = useAuth();
   const config = getBusinessConfig(businessId);
   if (!config) notFound();
 
@@ -30,14 +28,6 @@ export default function BusinessLayout({ children }: { children: ReactNode }) {
         <div className="lg:flex">
           <Sidebar businessId={businessId} />
           <main className="min-w-0 flex-1">
-            {/* The quick logins don't authenticate with Firebase, so nothing
-                loads or saves. Say so rather than showing empty screens. */}
-            {isLocalSession && (
-              <p className="bg-warn px-4 py-2 text-center text-[13px] font-medium text-white">
-                Signed in on this device only — invoices won&rsquo;t load or save. Sign out and use
-                your email address.
-              </p>
-            )}
             <div className="mx-auto min-h-dvh max-w-2xl pb-28 lg:max-w-4xl lg:pb-12">{children}</div>
           </main>
         </div>

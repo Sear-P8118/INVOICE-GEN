@@ -10,18 +10,20 @@ import {
 import { auth, isFirebaseConfigured } from '@/lib/firebase';
 import { ALLOWED_EMAILS } from '@/lib/constants';
 
-// Quick logins that bypassed Firebase entirely. Deliberately empty now: a local
-// session can't read or write anything (Firestore refuses it), so it only ever
-// looked like a working login. Sign in with a real email instead.
-const LOCAL_ACCOUNTS: Record<string, string> = {};
-const LOCAL_SESSION_KEY = 'invoice-local-user';
+// This app used to allow "quick logins" (sear/sami) that skipped Firebase.
+// They were a trap: the app looked signed in, but Firestore refused every read
+// and write because there was no Firebase user behind the request. The logins
+// are gone, and any session one left behind is cleared on load so nobody stays
+// stuck in that state.
+const LEGACY_SESSION_KEY = 'invoice-local-user';
 
-type AppUser = User | { email: string };
-
-function readLocalSession(): AppUser | null {
-  if (typeof window === 'undefined') return null;
-  const username = localStorage.getItem(LOCAL_SESSION_KEY);
-  return username ? { email: username } : null;
+function clearLegacySession() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(LEGACY_SESSION_KEY);
+  } catch {
+    /* private mode / storage disabled — nothing to clear */
+  }
 }
 
 function isAllowed(email: string | null): boolean {
@@ -32,17 +34,12 @@ function isAllowed(email: string | null): boolean {
 }
 
 export function useAuth() {
-  const [user, setUser] = useState<AppUser | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   // With no Firebase config there is nothing to wait for.
   const [loading, setLoading] = useState(isFirebaseConfigured);
 
   useEffect(() => {
-    const localUser = readLocalSession();
-    if (localUser) {
-      setUser(localUser);
-      setLoading(false);
-      return;
-    }
+    clearLegacySession();
     if (!isFirebaseConfigured) return;
     return onAuthStateChanged(auth(), (u) => {
       if (u && !isAllowed(u.email)) {
@@ -53,14 +50,6 @@ export function useAuth() {
       }
       setLoading(false);
     });
-  }, []);
-
-  const signInLocal = useCallback((username: string, password: string): boolean => {
-    const key = username.trim().toLowerCase();
-    if (LOCAL_ACCOUNTS[key] !== password) return false;
-    localStorage.setItem(LOCAL_SESSION_KEY, key);
-    setUser({ email: key });
-    return true;
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
@@ -78,15 +67,10 @@ export function useAuth() {
   }, []);
 
   const signOut = useCallback(() => {
-    localStorage.removeItem(LOCAL_SESSION_KEY);
+    clearLegacySession();
     setUser(null);
     if (isFirebaseConfigured) fbSignOut(auth());
   }, []);
 
-  // A quick-login session never authenticates with Firebase, so every read and
-  // write is refused with permission-denied. Screens use this to say so plainly
-  // instead of sitting there empty.
-  const isLocalSession = user !== null && !('uid' in user);
-
-  return { user, loading, isLocalSession, signIn, signInLocal, signOut };
+  return { user, loading, signIn, signOut };
 }

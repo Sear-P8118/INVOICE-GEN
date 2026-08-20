@@ -22,7 +22,7 @@ function resolveLogin(input: string): string {
 }
 
 export default function LoginPage() {
-  const { user, loading, signIn, signInLocal } = useAuth();
+  const { user, loading, signIn } = useAuth();
   const router = useRouter();
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
@@ -39,9 +39,7 @@ export default function LoginPage() {
     setError('');
     setBusy(true);
     try {
-      if (!signInLocal(login, password)) {
-        await signIn(resolveLogin(login), password);
-      }
+      await signIn(resolveLogin(login), password);
       // Re-arm the birthday screen so a fresh login shows it again (within the window).
       try {
         sessionStorage.removeItem('bdayShown');
