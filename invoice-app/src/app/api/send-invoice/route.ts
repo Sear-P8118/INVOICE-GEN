@@ -14,7 +14,16 @@ interface Body {
   customerName: string;
   invoiceNumber: string;
   amount: string; // pre-formatted, e.g. "$286.00"
-  dueDate?: string; // pre-formatted, empty when nothing is owed
+  /** Pre-formatted status line, e.g. "Paid in full" / "Due 3 September 2026". */
+  status?: string;
+  paid?: boolean;
+  invoiceDate?: string; // pre-formatted issue date
+  /** Humour-bearing copy, all optional; the template has plain fallbacks. */
+  reviewHeadline?: string;
+  reviewMessage?: string;
+  reviewMicrocopy?: string;
+  invoiceFootnote?: string;
+  logoUrl?: string;
   docLabel?: string; // "Tax Invoice" / "Quote"
   /** Omitted for a review-request email, which has nothing to attach. */
   pdfBase64?: string;
@@ -64,8 +73,16 @@ export async function POST(req: Request) {
     customerName: body.customerName || '',
     invoiceNumber: body.invoiceNumber,
     amount: body.amount || '',
-    dueDate: body.dueDate,
-    intro: body.intro,
+    status: body.status,
+    paid: body.paid,
+    invoiceDate: body.invoiceDate,
+    // The message box in the app writes the review copy, since the review is
+    // now the hero of the email.
+    reviewHeadline: body.reviewHeadline,
+    reviewMessage: body.reviewMessage || body.intro,
+    reviewMicrocopy: body.reviewMicrocopy,
+    invoiceFootnote: body.invoiceFootnote,
+    logoUrl: body.logoUrl,
     reviewUrl: body.reviewUrl,
     kind,
     attached: Boolean(body.pdfBase64),

@@ -147,6 +147,14 @@ export default function InvoiceDetailPage() {
           invoiceNumber: invoice.invoiceNumber,
           amount: formatCurrency(invoice.total),
           dueDate: invoice.dueDate ? formatDate(invoice.dueDate) : '',
+          paid: invoice.status === 'Paid',
+          status:
+            invoice.status === 'Paid'
+              ? 'Paid in full'
+              : invoice.dueDate
+                ? `Due ${formatDate(invoice.dueDate)}`
+                : invoice.status,
+          invoiceDate: invoice.issueDate ? formatDate(invoice.issueDate) : '',
           docLabel:
             invoice.status === 'Quote' ? 'Quote' : invoice.gstRegistered ? 'Tax Invoice' : 'Invoice',
           pdfBase64,
