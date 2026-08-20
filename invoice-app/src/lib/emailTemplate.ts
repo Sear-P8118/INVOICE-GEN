@@ -218,6 +218,13 @@ export function renderInvoiceEmail(d: InvoiceEmailData): string {
     <td class="col" width="${showReview ? '40%' : '100%'}" valign="top"
         style="width:${showReview ? '40%' : '100%'}; background:${WHITE}; padding:32px 28px;">
 
+      ${
+        // With no review panel there is no branding anywhere above the fold,
+        // so the wordmark moves here rather than leaving the email anonymous.
+        showReview
+          ? ''
+          : `<p style="margin:0 0 20px 0; font-family:${FONT}; font-size:14px; font-weight:800; letter-spacing:1.2px; text-transform:uppercase; color:${BLACK};">${business}</p>`
+      }
       <p style="margin:0; font-family:${FONT}; font-size:13px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:${BLUE};">
         Invoice
       </p>

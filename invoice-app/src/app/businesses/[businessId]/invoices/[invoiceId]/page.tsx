@@ -435,13 +435,18 @@ export default function InvoiceDetailPage() {
               />
             </FieldGroup>
 
-            {emailKind === 'invoice' ? (
+            {emailKind === 'invoice' && askReview && hasReviewLink ? (
               <FieldGroup
-                header="Message"
-                footer={`Sends ${invoice.invoiceNumber} as a PDF in your branded template. Replies go to ${business?.email || 'your business email'}.`}
+                header="Review message"
+                footer={`The line under the headline in the review panel. ${invoice.invoiceNumber} is attached as a PDF; replies go to ${business?.email || 'your business email'}.`}
               >
                 <Textarea rows={4} value={emailMsg} onChange={(e) => setEmailMsg(e.target.value)} />
               </FieldGroup>
+            ) : emailKind === 'invoice' ? (
+              <p className="rounded-[12px] bg-surface px-4 py-3 text-[15px] leading-snug text-label2">
+                Sends {invoice.invoiceNumber} as a PDF with the invoice summary. Switch on
+                &ldquo;Ask for a review&rdquo; below to include the review panel.
+              </p>
             ) : (
               <p className="rounded-[12px] bg-surface px-4 py-3 text-[15px] leading-snug text-label2">
                 Sends your branded &ldquo;Fully charged. Fully satisfied?&rdquo; thank-you with the
