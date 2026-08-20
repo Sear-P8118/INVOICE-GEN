@@ -29,7 +29,7 @@ import {
   deleteInvoice,
   convertQuoteToInvoice,
 } from '@/lib/firestore';
-import { emailLogoSize, formatCurrency, getBusinessConfig } from '@/lib/constants';
+import { formatCurrency } from '@/lib/constants';
 import {
   invoiceIntro,
   reviewSms,
@@ -43,7 +43,6 @@ import { Business, Invoice, InvoiceStatus, INVOICE_STATUSES } from '@/types';
 export default function InvoiceDetailPage() {
   const { businessId, invoiceId } = useParams<{ businessId: string; invoiceId: string }>();
   const router = useRouter();
-  const config = getBusinessConfig(businessId)!;
   const [invoice, setInvoice] = useState<Invoice | null | undefined>(undefined);
   const [business, setBusiness] = useState<Business | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -141,10 +140,6 @@ export default function InvoiceDetailPage() {
           to: emailTo.trim(),
           kind: emailKind,
           businessName: business.name,
-          // 52px tall, capped at 170 wide, keeping the artwork's aspect ratio.
-          logoPath: config.logo.src,
-          ...emailLogoSize(config.logo.width, config.logo.height),
-          logoBg: config.logo.bg,
           businessAddress: business.address,
           businessPhone: business.phone,
           businessEmail: business.email,

@@ -186,18 +186,6 @@ export function getBusinessConfig(id: string): BusinessConfig | undefined {
   return BUSINESSES.find((b) => b.id === id);
 }
 
-/**
- * How big a business logo should render in an email: 52px tall, but never
- * wider than 170px, so the wide wordmarks and the squarer logos carry roughly
- * the same visual weight above the card.
- */
-export function emailLogoSize(width: number, height: number): { logoWidth: number; logoHeight: number } {
-  const MAX_H = 52;
-  const MAX_W = 170;
-  const scale = Math.min(MAX_H / height, MAX_W / width);
-  return { logoWidth: Math.round(width * scale), logoHeight: Math.round(height * scale) };
-}
-
 export const GST_RATE = 0.1;
 
 export function formatCurrency(amount: number): string {
