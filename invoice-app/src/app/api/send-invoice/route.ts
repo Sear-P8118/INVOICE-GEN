@@ -8,6 +8,11 @@ export const runtime = 'nodejs';
 interface Body {
   to: string;
   businessName: string;
+  /** Site-relative, e.g. "/logos/bfd.png"; turned into an absolute URL below. */
+  logoPath?: string;
+  logoWidth?: number;
+  logoHeight?: number;
+  logoBg?: string;
   businessAddress?: string;
   businessPhone?: string;
   businessEmail?: string;
@@ -56,8 +61,22 @@ export async function POST(req: Request) {
   const label = body.docLabel || 'Invoice';
   const kind = body.kind || 'invoice';
 
+  // Email clients fetch images over the public internet, so the logo needs an
+  // absolute https URL. Prefer the project's production domain: a localhost or
+  // preview origin would render as a broken image in the customer's inbox.
+  const productionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  const origin =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (productionUrl ? `https://${productionUrl}` : new URL(req.url).origin);
+  const logoUrl =
+    body.logoPath && origin.startsWith('https://') ? `${origin}${body.logoPath}` : undefined;
+
   const html = renderInvoiceEmail({
     businessName: body.businessName,
+    logoUrl,
+    logoWidth: body.logoWidth,
+    logoHeight: body.logoHeight,
+    logoBg: body.logoBg,
     businessAddress: body.businessAddress,
     businessPhone: body.businessPhone,
     businessEmail: body.businessEmail,

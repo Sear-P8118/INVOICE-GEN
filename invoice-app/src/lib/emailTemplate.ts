@@ -12,6 +12,13 @@
 
 export interface InvoiceEmailData {
   businessName: string;
+  /** Absolute https URL — email clients can't resolve relative paths. */
+  logoUrl?: string;
+  /** Rendered size, in px, worked out from the artwork's aspect ratio. */
+  logoWidth?: number;
+  logoHeight?: number;
+  /** Background the artwork is drawn for; anything non-white gets a chip. */
+  logoBg?: string;
   businessAddress?: string;
   businessPhone?: string;
   businessEmail?: string;
@@ -150,6 +157,22 @@ export function renderInvoiceEmail(d: InvoiceEmailData): string {
     </tr>`
     : '';
 
+  // The logo sits above the card, where Google puts the sender. Artwork drawn
+  // for a dark background gets that background back as a chip, otherwise a
+  // black-on-black logo would vanish against the white page.
+  const darkChip = Boolean(d.logoBg && d.logoBg.toLowerCase() !== '#ffffff' && d.logoBg.toLowerCase() !== '#fff');
+  const senderBlock = d.logoUrl
+    ? `<table role="presentation" cellpadding="0" cellspacing="0">
+         <tr>
+           <td style="${darkChip ? `background:${esc(d.logoBg || '#ffffff')}; border-radius:6px; padding:8px 12px;` : ''}">
+             <img src="${esc(d.logoUrl)}" alt="${business}"
+                  width="${d.logoWidth || 120}" height="${d.logoHeight || 40}"
+                  style="display:block; width:${d.logoWidth || 120}px; height:${d.logoHeight || 40}px;">
+           </td>
+         </tr>
+       </table>`
+    : `<span style="font-family:${FONT}; font-size:13px; font-weight:500; letter-spacing:0.4px; text-transform:uppercase; color:${FAINT};">${business}</span>`;
+
   const contact = [d.businessPhone, d.businessEmail].filter(Boolean).join(' · ');
   const footerLines = [d.businessAddress, contact].filter(Boolean).map((l) => esc(l as string));
 
@@ -186,8 +209,8 @@ export function renderInvoiceEmail(d: InvoiceEmailData): string {
         <!-- Sender, above the card, the way Google puts it -->
         <table role="presentation" class="card" width="560" cellpadding="0" cellspacing="0" style="width:560px; max-width:560px;">
           <tr>
-            <td style="padding:0 4px 12px 4px; font-family:${FONT}; font-size:13px; font-weight:500; letter-spacing:0.4px; text-transform:uppercase; color:${FAINT};">
-              ${business}
+            <td style="padding:0 4px 14px 4px;">
+              ${senderBlock}
             </td>
           </tr>
         </table>
