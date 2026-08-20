@@ -22,6 +22,12 @@ export function greeting(customerName: string): string {
 
 const docWord = (invoice: Invoice) => (invoice.status === 'Quote' ? 'quote' : 'invoice');
 
+/**
+ * The same closing joke the review email signs off with, so a customer who
+ * gets both doesn't feel like they're dealing with two different businesses.
+ */
+const REVIEW_JOKE_SMS = '\n\nYour car should now start when asked. Revolutionary stuff, we know!';
+
 /** The editable intro paragraph of the invoice email. */
 export function invoiceIntro(invoice: Invoice, business: Business): string {
   if (invoice.status === 'Paid') {
@@ -41,7 +47,7 @@ export function invoiceWithReviewSms(invoice: Invoice, business: Business): stri
   else parts.push('is attached.');
   if (business.reviewUrl) {
     parts.push(
-      `\n\nIf we got your battery — and your day — sorted, a quick Google review helps other Perth drivers find a shop they can trust. Takes under a minute: ${business.reviewUrl}`
+      `\n\nIf we got your battery — and your day — sorted, a quick Google review helps other Perth drivers find a shop they can trust. Takes under a minute: ${business.reviewUrl}${REVIEW_JOKE_SMS}`
     );
   }
   return parts.join(' ');
@@ -49,7 +55,7 @@ export function invoiceWithReviewSms(invoice: Invoice, business: Business): stri
 
 /** Review-only text message, in the same voice as the email. */
 export function reviewSms(invoice: Invoice, business: Business): string {
-  return `${greeting(invoice.customerName)} thanks again for choosing ${business.name}. If we got your battery — and your day — sorted, a quick Google review helps other Perth drivers find a shop they can trust. Takes under 60 seconds and means a lot to a local, family-run business: ${business.reviewUrl}`;
+  return `${greeting(invoice.customerName)} thanks again for choosing ${business.name}. If we got your battery — and your day — sorted, a quick Google review helps other Perth drivers find a shop they can trust. Takes under 60 seconds and means a lot to a local, family-run business: ${business.reviewUrl}${REVIEW_JOKE_SMS}`;
 }
 
 export function formatDate(yyyyMmDd: string): string {

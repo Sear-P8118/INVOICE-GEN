@@ -2,10 +2,14 @@
  * The customer email: a review request with the invoice attached to it, not the
  * other way round.
  *
- * One card, split 60/40 on desktop — a near-black review hero on the left, a
- * calm white invoice panel on the right, and a full-width black footer beneath
- * both. The review headline, stars and CTA come before the invoice in the
- * source, so when the columns stack on a phone the review still lands first.
+ * One white, centred card in Google's own visual language — the four-colour
+ * Google wordmark, a large friendly headline, five gold stars, a paragraph of
+ * warm copy and a single blue pill button. The invoice, when there is one,
+ * sits quietly underneath in a summary strip. Nothing competes with the ask.
+ *
+ * Every mark on the page is text, a table cell or a border. There are no
+ * images at all, so the email looks identical whether or not the inbox
+ * downloads remote content — which is what killed the previous versions.
  *
  * Every piece of humour-bearing copy is a parameter with a plain fallback
  * (reviewHeadline / reviewMessage / reviewMicrocopy / invoiceFootnote) so the
@@ -53,7 +57,7 @@ export interface InvoiceEmailData {
   /** {{PDF_ATTACHMENT}} — true when the PDF rides along. */
   attached?: boolean;
 
-  /** 'invoice' = review hero + invoice panel; 'review' = review panel only. */
+  /** 'invoice' = review hero + invoice summary; 'review' = review only. */
   kind: 'invoice' | 'review';
 }
 
@@ -67,36 +71,61 @@ export function firstName(name: string): string {
   return first.length > 1 ? first : name.trim();
 }
 
-// The colour system, exactly as specified.
-const BLACK = '#0A0A0A';
-const BLUE = '#0D5BEF';
-const GOLD = '#FFC928';
-const WHITE = '#FFFFFF';
-const CANVAS = '#F5F6F8';
+// Google's palette, plus the greys Material uses around it.
+const G_BLUE = '#4285F4';
+const G_RED = '#EA4335';
+const G_YELLOW = '#FBBC05';
+const G_GREEN = '#34A853';
+const BLUE = '#1A73E8'; // the button blue, one notch deeper than the logo blue
+const INK = '#202124';
 const GREY = '#5F6368';
-const DIVIDER = '#E1E4E8';
-const BADGE_BG = '#DDF7DF';
-const BADGE_TEXT = '#187A2F';
-const ON_BLACK = '#B8BCC4'; // secondary text on the dark panel
+const LIGHT_GREY = '#80868B';
+const GOLD = '#FBBC05';
+const WHITE = '#FFFFFF';
+const CANVAS = '#F1F3F4';
+const SOFT = '#F8F9FA';
+const DIVIDER = '#E8EAED';
+const BADGE_BG = '#E6F4EA';
+const BADGE_TEXT = '#137333';
 
-/**
- * A large Google mark, sat behind the review copy at low opacity.
- *
- * Email can't layer a translucent panel over an image — there's no reliable
- * z-index or positioning — so the transparency is baked into the artwork
- * instead: the mark is drawn at 16% and the panel keeps its solid black
- * behind it. Same look, and it degrades to plain black wherever background
- * images are stripped (Outlook's Word engine, images-off in Gmail).
- *
- * It's an inline SVG data URI rather than a hosted file, so there's nothing
- * to download and nothing for an inbox to block.
- */
-const GOOGLE_WATERMARK =
-  "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg opacity='0.11'%3E%3Cpath d='M78.6 33.5A33.0 33.0 0 0 1 66.5 78.6' stroke='%234285F4' stroke-width='19.0' fill='none' stroke-linecap='butt'/%3E%3Cpath d='M66.5 78.6A33.0 33.0 0 0 1 21.4 66.5' stroke='%2334A853' stroke-width='19.0' fill='none' stroke-linecap='butt'/%3E%3Cpath d='M21.4 66.5A33.0 33.0 0 0 1 29.7 24.0' stroke='%23FBBC05' stroke-width='19.0' fill='none' stroke-linecap='butt'/%3E%3Cpath d='M29.7 24.0A33.0 33.0 0 0 1 78.6 33.5' stroke='%23EA4335' stroke-width='19.0' fill='none' stroke-linecap='butt'/%3E%3Crect x='50' y='40.5' width='42.0' height='19' fill='%234285F4'/%3E%3C/g%3E%3C/svg%3E";
 // Single quotes inside deliberately: this string is interpolated into
 // style="..." attributes, and a double quote there would terminate the
 // attribute and silently drop every declaration after it.
-const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif";
+const FONT = "'Google Sans', Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, Helvetica, sans-serif";
+
+/**
+ * The house joke, sat under the button on every review ask. It's the one
+ * unserious line in the email, which is exactly why it works — everything
+ * above it is straight-faced.
+ *
+ * It lives inside the review panel and only ships with it: an invoice-only
+ * email (a business with no Google link) never carries the joke, because a
+ * plain invoice should stay straight-faced.
+ *
+ * Override it per-send with `reviewMicrocopy`; pass a single space to drop the
+ * strip entirely.
+ */
+export const REVIEW_JOKE =
+  'Your car should now start when asked. Revolutionary stuff, we know!';
+
+/**
+ * The Google wordmark, spelled out in coloured spans rather than drawn as an
+ * image. Inboxes that block images can't block letters, so the brand cue is
+ * always there.
+ */
+function googleWordmark(size: number): string {
+  const letters: [string, string][] = [
+    ['G', G_BLUE],
+    ['o', G_RED],
+    ['o', G_YELLOW],
+    ['g', G_BLUE],
+    ['l', G_GREEN],
+    ['e', G_RED],
+  ];
+  return `<span style="font-family:${FONT}; font-size:${size}px; line-height:${Math.round(size * 1.2)}px; font-weight:500; letter-spacing:-0.5px;">${letters
+    .map(([ch, colour]) => `<span style="color:${colour};">${ch}</span>`)
+    .join('')}</span>`;
+}
 
 export function renderInvoiceEmail(d: InvoiceEmailData): string {
   const name = esc(firstName(d.customerName));
@@ -104,103 +133,129 @@ export function renderInvoiceEmail(d: InvoiceEmailData): string {
   const showInvoice = d.kind === 'invoice';
   const showReview = Boolean(d.reviewUrl);
 
-  const headline = esc(d.reviewHeadline || `Thanks for choosing ${d.businessName}.`);
+  const headline = esc(
+    d.reviewHeadline || (name ? `Thanks ${name} — how did we do?` : 'How did we do?')
+  );
   const message = esc(
     d.reviewMessage ||
-      "If you were happy with our service, we'd really appreciate a quick Google review."
+      `If we sorted you out, a quick Google review would mean a lot. It takes under a minute, and it's how other locals find a battery crew they can trust.`
   );
-  const microcopy = d.reviewMicrocopy?.trim() ? esc(d.reviewMicrocopy.trim()) : '';
+  // An explicitly blank microcopy (a space) means "no joke this time"; an
+  // absent one gets the house joke.
+  const microcopy =
+    d.reviewMicrocopy === undefined ? esc(REVIEW_JOKE) : esc(d.reviewMicrocopy.trim());
   const footnote = esc(d.invoiceFootnote || 'Thanks again for your support.');
 
   const preheader = showReview
     ? `${d.reviewHeadline ? esc(d.reviewHeadline) : `Thanks ${name}`} — a quick Google review means a lot.`
     : `${esc(d.invoiceNumber)} · ${esc(d.amount)} from ${business}`;
 
-  // Upper-left branding: the supplied logo if there is one, otherwise the
-  // business name set as a wordmark so the corner is never empty.
+  // Top of the card: the supplied logo if there is one, otherwise the business
+  // name set as a wordmark so the header is never empty.
   const branding = d.logoUrl
     ? `<img src="${esc(d.logoUrl)}" alt="${business}" width="${d.logoWidth || 150}" height="${d.logoHeight || 40}"
-            style="display:block; width:${d.logoWidth || 150}px; height:${d.logoHeight || 40}px; border:0;">`
-    : `<span style="font-family:${FONT}; font-size:15px; font-weight:800; letter-spacing:1.4px; text-transform:uppercase; color:${WHITE};">${business}</span>`;
+            style="display:block; margin:0 auto; width:${d.logoWidth || 150}px; height:${d.logoHeight || 40}px; border:0;">`
+    : `<span style="font-family:${FONT}; font-size:15px; font-weight:700; letter-spacing:1.6px; text-transform:uppercase; color:${INK};">${business}</span>`;
 
-  // The Google mark, drawn with a styled letter rather than an image: remote
-  // images are blocked by default in most inboxes, and a button whose icon
-  // vanishes looks broken. This always renders.
-  const googleMark = `
+  // A thumbs up, set in a soft round badge so it reads as a designed mark
+  // rather than a stray emoji dropped into the copy. The glyph itself is a
+  // text character, so there is still no image here to be blocked.
+  const thumbsUpIcon = `
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-table; vertical-align:middle;">
       <tr>
-        <td width="22" height="22" align="center" valign="middle"
-            style="width:22px; height:22px; background:${WHITE}; border-radius:11px; font-family:${FONT}; font-size:15px; font-weight:700; line-height:22px; color:${BLUE};">G</td>
+        <td align="center" valign="middle" width="44" height="44" bgcolor="${BADGE_BG}"
+            style="width:44px; height:44px; background:${BADGE_BG}; border-radius:22px; font-size:22px; line-height:44px;">
+          &#128077;
+        </td>
       </tr>
     </table>`;
 
+  // Five stars, each its own span so they land one after another where CSS
+  // animation is supported; everywhere else they sit still, large and gold.
+  const stars = [0, 1, 2, 3, 4]
+    .map((i) => `<span class="star star-${i + 1}" style="display:inline-block; color:${GOLD};">&#9733;</span>`)
+    .join('');
+
   const reviewPanel = showReview
     ? `
-    <td class="col" width="${showInvoice ? '60%' : '100%'}" valign="top" bgcolor="${BLACK}"
-        style="width:${showInvoice ? '60%' : '100%'}; background-color:${BLACK};
-               background-image:url(&quot;${GOOGLE_WATERMARK}&quot;);
-               background-repeat:no-repeat;
-               background-position:right -72px bottom -68px;
-               background-size:340px 340px;
-               padding:32px;">
+      <!-- Google wordmark: whose review this is, before a word is read -->
+      <tr>
+        <td align="center" style="padding:34px 34px 0 34px;">
+          ${googleWordmark(34)}
+        </td>
+      </tr>
 
-      <!-- Branding -->
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-        <tr><td align="left" style="padding-bottom:26px;">${branding}</td></tr>
-      </table>
+      <!-- Headline -->
+      <tr>
+        <td align="center" style="padding:22px 40px 0 40px;">
+          <h1 class="headline" style="margin:0; font-family:${FONT}; font-size:30px; line-height:38px; font-weight:400; letter-spacing:-0.4px; color:${INK};">
+            ${headline}
+          </h1>
+        </td>
+      </tr>
 
-      <!-- Review headline -->
-      <h1 class="headline" style="margin:0; font-family:${FONT}; font-size:29px; line-height:34px; font-weight:800; letter-spacing:-0.5px; color:${WHITE};">
-        ${headline}
-      </h1>
+      <!-- Stars -->
+      <tr>
+        <td align="center" style="padding:24px 24px 0 24px; font-family:${FONT}; font-size:34px; line-height:40px; letter-spacing:8px; color:${GOLD};">
+          ${stars}
+        </td>
+      </tr>
 
-      <!-- Review message -->
-      <p style="margin:14px 0 0 0; font-family:${FONT}; font-size:15px; line-height:24px; color:${ON_BLACK};">
-        ${message}
-      </p>
+      <!-- Copy -->
+      <tr>
+        <td align="center" style="padding:24px 46px 0 46px;">
+          <p style="margin:0; font-family:${FONT}; font-size:16px; line-height:26px; color:${GREY};">
+            ${message}
+          </p>
+        </td>
+      </tr>
 
-      <!-- Five stars. Each is its own span so they can twinkle in sequence
-           where CSS animation is supported (Apple Mail, iOS Mail); everywhere
-           else they simply sit there, large and gold. -->
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-        <tr>
-          <td style="padding:28px 0 24px 0; font-family:${FONT}; font-size:38px; line-height:44px; letter-spacing:6px; color:${GOLD};">
-            ${[0, 1, 2, 3, 4]
-              .map(
-                (i) =>
-                  `<span class="star star-${i + 1}" style="display:inline-block; color:${GOLD};">&#9733;</span>`
-              )
-              .join('')}
-          </td>
-        </tr>
-      </table>
-
-      <!-- Google review CTA -->
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="cta">
-        <tr>
-          <td align="center" bgcolor="${BLUE}" style="background:${BLUE}; border-radius:6px;">
-            <a href="${esc(d.reviewUrl || '')}" target="_blank"
-               style="display:block; padding:15px 26px; font-family:${FONT}; font-size:15px; font-weight:700; letter-spacing:0.6px; color:${WHITE}; text-decoration:none;">
-              ${googleMark}<span style="display:inline-block; vertical-align:middle; padding-left:10px;">LEAVE A REVIEW</span>
-            </a>
-          </td>
-        </tr>
-      </table>
+      <!-- Review CTA: one Material pill, nothing else -->
+      <tr>
+        <td align="center" style="padding:30px 34px 0 34px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="cta">
+            <tr>
+              <td align="center" bgcolor="${BLUE}" style="background:${BLUE}; border-radius:24px;">
+                <a href="${esc(d.reviewUrl || '')}" target="_blank"
+                   style="display:block; padding:15px 40px; font-family:${FONT}; font-size:15px; font-weight:500; letter-spacing:0.3px; color:${WHITE}; text-decoration:none;">
+                  Write a review
+                </a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
       ${
         microcopy
-          ? `<p style="margin:14px 0 0 0; font-family:${FONT}; font-size:13px; line-height:19px; color:${ON_BLACK};">${microcopy}</p>`
+          ? `<tr>
+               <td align="center" class="pad" style="padding:26px 40px 0 40px;">
+                 <!-- The joke, in its own soft strip, with a thumbs up
+                      drawn on the right. -->
+                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="joke"
+                        style="background:${SOFT}; border:1px solid ${DIVIDER}; border-radius:12px;">
+                   <tr>
+                     <td valign="middle" style="padding:14px 12px 14px 18px; font-family:${FONT}; font-size:13.5px; line-height:20px; font-style:italic; color:${GREY};">
+                       ${microcopy}
+                     </td>
+                     <td valign="middle" align="right" style="padding:14px 18px 14px 0;">
+                       ${thumbsUpIcon}
+                     </td>
+                   </tr>
+                 </table>
+               </td>
+             </tr>`
           : ''
       }
-    </td>`
+      <tr><td style="height:36px; line-height:36px; font-size:0;">&nbsp;</td></tr>`
     : '';
 
   /** One invoice row: label left, value right, hairline above. */
   const row = (label: string, value: string, opts: { first?: boolean; bold?: boolean } = {}) => `
     <tr>
-      <td style="padding:${opts.first ? '0' : '13px'} 0 13px 0; ${opts.first ? '' : `border-top:1px solid ${DIVIDER};`} font-family:${FONT}; font-size:14px; color:${GREY};">
+      <td style="padding:${opts.first ? '0' : '12px'} 0 12px 0; ${opts.first ? '' : `border-top:1px solid ${DIVIDER};`} font-family:${FONT}; font-size:14px; color:${GREY};">
         ${esc(label)}
       </td>
-      <td align="right" style="padding:${opts.first ? '0' : '13px'} 0 13px 0; ${opts.first ? '' : `border-top:1px solid ${DIVIDER};`} font-family:${FONT}; font-size:${opts.bold ? '17px' : '14px'}; font-weight:${opts.bold ? '700' : '500'}; color:${BLACK};">
+      <td align="right" style="padding:${opts.first ? '0' : '12px'} 0 12px 0; ${opts.first ? '' : `border-top:1px solid ${DIVIDER};`} font-family:${FONT}; font-size:${opts.bold ? '17px' : '14px'}; font-weight:${opts.bold ? '700' : '500'}; color:${INK};">
         ${value}
       </td>
     </tr>`;
@@ -213,49 +268,47 @@ export function renderInvoiceEmail(d: InvoiceEmailData): string {
        </table>`
     : esc(d.status || 'Due');
 
+  // The invoice is the postscript now: a soft grey strip under the ask.
   const invoicePanel = showInvoice
     ? `
-    <td class="col" width="${showReview ? '40%' : '100%'}" valign="top"
-        style="width:${showReview ? '40%' : '100%'}; background:${WHITE}; padding:32px 28px;">
+      <tr>
+        <td class="pad" bgcolor="${SOFT}" style="background:${SOFT}; border-top:1px solid ${DIVIDER}; padding:26px 34px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td style="font-family:${FONT}; font-size:12px; font-weight:700; letter-spacing:1.4px; text-transform:uppercase; color:${GREY};">
+                Your invoice
+              </td>
+              <td align="right" style="font-family:${FONT}; font-size:15px; font-weight:700; color:${INK};">
+                ${esc(d.invoiceNumber)}
+              </td>
+            </tr>
+          </table>
 
-      ${
-        // With no review panel there is no branding anywhere above the fold,
-        // so the wordmark moves here rather than leaving the email anonymous.
-        showReview
-          ? ''
-          : `<p style="margin:0 0 20px 0; font-family:${FONT}; font-size:14px; font-weight:800; letter-spacing:1.2px; text-transform:uppercase; color:${BLACK};">${business}</p>`
-      }
-      <p style="margin:0; font-family:${FONT}; font-size:13px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:${BLUE};">
-        Invoice
-      </p>
-      <p style="margin:6px 0 0 0; font-family:${FONT}; font-size:26px; line-height:32px; font-weight:700; letter-spacing:-0.4px; color:${BLACK};">
-        ${esc(d.invoiceNumber)}
-      </p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;">
+            ${row('Status', statusValue, { first: true })}
+            ${row('Amount', esc(d.amount), { bold: true })}
+            ${d.invoiceDate ? row('Date', esc(d.invoiceDate)) : ''}
+          </table>
 
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:22px;">
-        ${row('Status', statusValue, { first: true })}
-        ${row('Amount', esc(d.amount), { bold: true })}
-        ${d.invoiceDate ? row('Date', esc(d.invoiceDate)) : ''}
-      </table>
-
-      ${
-        d.attached
-          ? `<p style="margin:18px 0 0 0; font-family:${FONT}; font-size:12.5px; line-height:19px; color:${GREY};">
-               Your full invoice is attached to this email as a PDF.
-             </p>`
-          : ''
-      }
-      <p style="margin:${d.attached ? '10px' : '20px'} 0 0 0; font-family:${FONT}; font-size:12.5px; line-height:19px; color:${GREY};">
-        ${footnote}
-      </p>
-    </td>`
+          ${
+            d.attached
+              ? `<p style="margin:16px 0 0 0; font-family:${FONT}; font-size:12.5px; line-height:19px; color:${GREY};">
+                   Your full invoice is attached to this email as a PDF.
+                 </p>`
+              : ''
+          }
+          <p style="margin:${d.attached ? '8px' : '16px'} 0 0 0; font-family:${FONT}; font-size:12.5px; line-height:19px; color:${GREY};">
+            ${footnote}
+          </p>
+        </td>
+      </tr>`
     : '';
 
   const footerCell = (icon: string, text: string, link?: string, last = false) => `
-    <td class="foot" align="center" valign="middle"
-        style="padding:14px 16px; ${last ? '' : `border-right:1px solid #262626;`} font-family:${FONT}; font-size:12.5px; line-height:18px; color:${ON_BLACK};">
-      <span style="color:${BLUE};">${icon}</span>&nbsp;${
-        link ? `<a href="${link}" style="color:${ON_BLACK}; text-decoration:none;">${esc(text)}</a>` : esc(text)
+    <td class="foot${last ? ' foot-last' : ''}" align="center" valign="middle"
+        style="padding:14px 16px; ${last ? '' : `border-right:1px solid ${DIVIDER};`} font-family:${FONT}; font-size:12.5px; line-height:18px; color:${GREY};">
+      <span style="color:${LIGHT_GREY};">${icon}</span>&nbsp;${
+        link ? `<a href="${link}" style="color:${GREY}; text-decoration:none;">${esc(text)}</a>` : esc(text)
       }
     </td>`;
 
@@ -289,42 +342,30 @@ export function renderInvoiceEmail(d: InvoiceEmailData): string {
     75%  { transform:scale(0.94); }
     100% { transform:scale(1); opacity:1; }
   }
-  @keyframes starGlow {
-    0%, 100% { text-shadow:0 0 0 rgba(255,201,40,0); }
-    50%      { text-shadow:0 0 14px rgba(255,201,40,0.85); }
-  }
   .star {
-    animation:starPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both,
-              starGlow 2.6s ease-in-out 2.2s infinite;
+    animation:starPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
   }
-  .star-1 { animation-delay:0.10s, 2.20s; }
-  .star-2 { animation-delay:0.24s, 2.34s; }
-  .star-3 { animation-delay:0.38s, 2.48s; }
-  .star-4 { animation-delay:0.52s, 2.62s; }
-  .star-5 { animation-delay:0.66s, 2.76s; }
+  .star-1 { animation-delay:0.10s; }
+  .star-2 { animation-delay:0.24s; }
+  .star-3 { animation-delay:0.38s; }
+  .star-4 { animation-delay:0.52s; }
+  .star-5 { animation-delay:0.66s; }
 
   @media (prefers-reduced-motion: reduce) {
     .star { animation:none !important; opacity:1 !important; transform:none !important; }
   }
 
-  /* Stack the two columns on a phone. The review panel is first in the source,
-     so it stays above the invoice however narrow the screen gets. */
   @media screen and (max-width:620px) {
-    /* Turning the card's own rows into blocks removes the table column
-       algorithm, which is what was holding the layout at 660px and pushing
-       content off the side of the screen. */
     .wrap { width:100% !important; max-width:100% !important; padding-left:0 !important; padding-right:0 !important; }
-    .card, .cardrow, .footwrap, .foottable, .footrow {
-      display:block !important; width:100% !important; max-width:100% !important;
-    }
+    .card, .foottable, .footrow { display:block !important; width:100% !important; max-width:100% !important; }
     .card { border-radius:0 !important; }
-    .col { display:block !important; width:100% !important; max-width:100% !important; box-sizing:border-box !important; padding:28px 24px !important; }
+    .pad { padding-left:22px !important; padding-right:22px !important; }
+    .headline { font-size:25px !important; line-height:32px !important; }
     .cta { width:100% !important; }
     .cta td { text-align:center !important; }
-    .headline { font-size:26px !important; line-height:31px !important; }
-    .star { font-size:34px !important; }
+    .joke { width:100% !important; }
     /* Footer items sit one per line, dividers off. */
-    .foot { display:block !important; width:100% !important; border-right:0 !important; border-bottom:1px solid #262626 !important; padding:12px 16px !important; }
+    .foot { display:block !important; width:100% !important; border-right:0 !important; border-bottom:1px solid ${DIVIDER} !important; padding:12px 16px !important; }
     .foot-last { border-bottom:0 !important; }
   }
 </style>
@@ -337,20 +378,29 @@ export function renderInvoiceEmail(d: InvoiceEmailData): string {
 
   <table role="presentation" class="wrap" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${CANVAS};">
     <tr>
-      <td class="wrap" align="center" style="padding:32px 12px;">
+      <td class="wrap" align="center" style="padding:34px 12px;">
 
-        <table role="presentation" class="card" width="660" cellpadding="0" cellspacing="0" border="0"
-               style="width:100%; max-width:660px; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(10,10,10,0.08);">
+        <table role="presentation" class="card" width="600" cellpadding="0" cellspacing="0" border="0"
+               style="width:100%; max-width:600px; background:${WHITE}; border-radius:14px; overflow:hidden; box-shadow:0 1px 3px rgba(60,64,67,0.16), 0 4px 14px rgba(60,64,67,0.10);">
 
-          <!-- Review (60%) + Invoice (40%) -->
-          <tr class="cardrow">
-            ${reviewPanel}
-            ${invoicePanel}
+          <!-- Business logo / wordmark -->
+          <tr>
+            <td align="center" style="padding:30px 34px 0 34px; border-bottom:0;">
+              ${branding}
+            </td>
           </tr>
 
-          <!-- Full-width footer, same black as the review panel -->
-          <tr class="cardrow">
-            <td class="footwrap" colspan="${showReview && showInvoice ? '2' : '1'}" bgcolor="${BLACK}" style="background:${BLACK};">
+          ${
+            // With no review ask above it, the invoice strip would butt straight
+            // up against the wordmark.
+            showReview ? '' : `<tr><td style="height:26px; line-height:26px; font-size:0;">&nbsp;</td></tr>`
+          }
+          ${reviewPanel}
+          ${invoicePanel}
+
+          <!-- Contact strip -->
+          <tr>
+            <td bgcolor="${WHITE}" style="background:${WHITE}; border-top:1px solid ${DIVIDER};">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="foottable">
                 <tr class="footrow">
                   ${footerItems.join('')}
