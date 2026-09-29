@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -14,6 +14,8 @@ import {
   Star,
   FileCheck2,
   Check,
+  Paperclip,
+  Loader2,
 } from 'lucide-react';
 import TopBar, { NavButton } from '@/components/ui/TopBar';
 import Button from '@/components/ui/Button';
@@ -53,6 +55,15 @@ export default function InvoiceDetailPage() {
   const [converting, setConverting] = useState(false);
   const [convertWarn, setConvertWarn] = useState(false);
 
+  // The invoice PDF, built once and reused by every way of sending it. It is
+  // prepared as soon as the page has its data, for two reasons: the email can
+  // never go out without it, and iOS only lets navigator.share run inside the
+  // tap that triggered it — so the file has to exist before the button is hit.
+  // Held together with the version of the invoice it was rendered from, so an
+  // edited invoice can never be sent using the PDF of the old one.
+  const [built, setBuilt] = useState<{ key: string; file: File } | null>(null);
+  const [pdfError, setPdfError] = useState('');
+
   // Email
   const [emailOpen, setEmailOpen] = useState(false);
   const [emailKind, setEmailKind] = useState<'invoice' | 'review'>('invoice');
@@ -66,12 +77,70 @@ export default function InvoiceDetailPage() {
   const [smsKind, setSmsKind] = useState<'invoice' | 'review'>('invoice');
   const [smsTo, setSmsTo] = useState('');
   const [smsMsg, setSmsMsg] = useState('');
+  const [smsDone, setSmsDone] = useState('');
+  const [smsBusy, setSmsBusy] = useState(false);
 
   // Live cache-first reads: the page renders instantly and stays accurate.
   useEffect(() => watchInvoice(invoiceId, setInvoice), [invoiceId]);
   useEffect(() => watchBusiness(businessId, setBusiness), [businessId]);
 
   const hasReviewLink = Boolean(business?.reviewUrl?.trim());
+  // Only true once the PDF exists AND this device can put a file into a
+  // message. A plain sms: link carries text and nothing else.
+  const [canAttachToSms, setCanAttachToSms] = useState(false);
+  // A laptop cannot send a text at all: there is no Messages app behind an
+  // sms: link, so following one just silently goes nowhere. Subscribed to
+  // rather than assumed, and the server snapshot says desktop so the markup
+  // matches on first paint.
+  const isHandheld = useSyncExternalStore(subscribeCoarsePointer, isCoarsePointer, () => false);
+
+  /**
+   * What "Text invoice" can honestly do on this device:
+   *   share   — put the PDF and the words into Messages (phone, iPad)
+   *   sms     — open Messages with the words only (older Android)
+   *   desktop — no texting at all; hand over the words and the file instead
+   */
+  const smsMode: 'share' | 'sms' | 'desktop' = canAttachToSms
+    ? 'share'
+    : isHandheld
+      ? 'sms'
+      : 'desktop';
+
+  // Every edit and status change moves this, which retires the cached PDF
+  // without anything having to remember to clear it.
+  const pdfKey = invoice ? `${invoice.id}|${invoice.updatedAt}|${invoice.status}` : '';
+  const pdf = built?.key === pdfKey ? built.file : null;
+
+  // Built up front rather than at send time: the email must never go out
+  // without it, and iOS only honours navigator.share inside the tap that
+  // triggered it — so the file has to exist before the button is pressed.
+  useEffect(() => {
+    if (!invoice || !business) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { invoicePdfFile, canShareFile } = await import('@/lib/pdf');
+        const file = await invoicePdfFile(invoice, business);
+        if (cancelled) return;
+        setBuilt({ key: `${invoice.id}|${invoice.updatedAt}|${invoice.status}`, file });
+        setCanAttachToSms(canShareFile(file));
+        setPdfError('');
+      } catch (e) {
+        if (!cancelled) setPdfError((e as Error).message || 'The invoice PDF could not be built.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [invoice, business]);
+
+  /** The prepared PDF, waiting on the build if it is still running. */
+  async function requirePdf(): Promise<File> {
+    if (pdf) return pdf;
+    if (!invoice || !business) throw new Error('The invoice is still loading.');
+    const { invoicePdfFile } = await import('@/lib/pdf');
+    return invoicePdfFile(invoice, business);
+  }
 
   async function setStatus(status: InvoiceStatus) {
     if (!invoice) return;
@@ -127,16 +196,26 @@ export default function InvoiceDetailPage() {
     setEmailState('sending');
     try {
       const token = await auth().currentUser?.getIdToken();
-      // A review-only email has no document to attach.
-      let pdfBase64: string | undefined;
-      if (emailKind === 'invoice') {
-        const { invoicePdfBase64 } = await import('@/lib/pdf');
-        pdfBase64 = await invoicePdfBase64(invoice, business);
+      // Every email carries the invoice — the review request included. If the
+      // PDF can't be built we stop here rather than sending a bare email.
+      let file: File;
+      try {
+        file = await requirePdf();
+      } catch (e) {
+        setEmailState(
+          `${(e as Error).message || 'The invoice PDF could not be built.'} Nothing was sent.`
+        );
+        return;
       }
-      const res = await fetch('/api/send-invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? ''}` },
-        body: JSON.stringify({
+
+      // Sent as multipart rather than base64 inside JSON: base64 adds a third
+      // to the size, which is what used to tip a long invoice over the request
+      // limit and lose the attachment.
+      const form = new FormData();
+      form.append('pdf', file, file.name);
+      form.append(
+        'payload',
+        JSON.stringify({
           to: emailTo.trim(),
           kind: emailKind,
           businessName: business.name,
@@ -157,13 +236,20 @@ export default function InvoiceDetailPage() {
           invoiceDate: invoice.issueDate ? formatDate(invoice.issueDate) : '',
           docLabel:
             invoice.status === 'Quote' ? 'Quote' : invoice.gstRegistered ? 'Tax Invoice' : 'Invoice',
-          pdfBase64,
           replyTo: business.email || undefined,
           intro: emailKind === 'invoice' ? emailMsg.trim() || undefined : undefined,
-          // A review-only email is nothing but the review ask.
+          // A review email leads with the ask; the invoice summary sits under
+          // it either way, because the PDF is attached to both.
           reviewUrl:
             emailKind === 'review' || (askReview && hasReviewLink) ? business.reviewUrl : undefined,
-        }),
+        })
+      );
+
+      const res = await fetch('/api/send-invoice', {
+        method: 'POST',
+        // No Content-Type: the browser writes the multipart boundary itself.
+        headers: { Authorization: `Bearer ${token ?? ''}` },
+        body: form,
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -182,17 +268,96 @@ export default function InvoiceDetailPage() {
     if (!invoice || !business) return;
     setSmsKind(kind);
     setSmsTo(invoice.customerPhone || '');
+    // The wording follows what the message will actually carry, so it never
+    // promises an attachment the text can't hold.
+    // Only the share sheet genuinely carries the PDF, so only it may say so.
+    const attaches = smsMode === 'share';
     setSmsMsg(
-      kind === 'review' ? reviewSms(invoice, business) : invoiceWithReviewSms(invoice, business)
+      kind === 'review'
+        ? reviewSms(invoice, business, attaches)
+        : invoiceWithReviewSms(invoice, business, attaches)
     );
+    setSmsDone('');
     setSmsOpen(true);
   }
 
-  function sendSms() {
-    // Hands off to the phone's own Messages app with the text pre-written —
-    // it sends from Sami's number, so replies come back to him.
-    window.location.href = smsHref(smsTo, smsMsg);
-    setSmsOpen(false);
+  /** Copies the message and saves the PDF — what a laptop can actually do. */
+  async function handOffToPhone(prefix: string) {
+    const { savePdfFile } = await import('@/lib/pdf');
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(smsMsg);
+      copied = true;
+    } catch {
+      // Clipboard access can be refused; the message is on screen to copy.
+    }
+    let saved = false;
+    try {
+      savePdfFile(await requirePdf());
+      saved = true;
+    } catch {
+      /* the PDF error is already shown above the button */
+    }
+    setSmsDone(
+      `${prefix}${copied ? 'Message copied' : 'Copy the message above'}${
+        saved ? ' and the invoice downloaded' : ''
+      } — send them from your phone.`
+    );
+  }
+
+  async function sendSms() {
+    if (!invoice || smsBusy) return;
+    setSmsDone('');
+    setSmsBusy(true);
+    try {
+      await runSms();
+    } finally {
+      setSmsBusy(false);
+    }
+  }
+
+  async function runSms() {
+    if (!invoice) return;
+
+    // The share sheet is the only route that puts the PDF itself into a text;
+    // an sms: link carries characters and nothing else. Picking Messages there
+    // still sends from your own number, so replies come back to you.
+    if (smsMode === 'share' && pdf) {
+      const { sharePdfFile } = await import('@/lib/pdf');
+      const result = await sharePdfFile(pdf, `Invoice ${invoice.invoiceNumber}`, smsMsg);
+      if (result === 'shared' || result === 'cancelled') {
+        setSmsOpen(false);
+        return;
+      }
+      // The sheet refused to open. Say what happened instead of appearing dead.
+      if (result === 'downloaded') {
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(smsMsg);
+          copied = true;
+        } catch {
+          /* the message is on screen to copy */
+        }
+        setSmsDone(
+          `This device wouldn’t open the share sheet, so the invoice downloaded instead${
+            copied ? ' and the message is copied' : ' — copy the message above'
+          }.`
+        );
+        return;
+      }
+      await handOffToPhone('Sharing isn’t available here. ');
+      return;
+    }
+
+    if (smsMode === 'sms') {
+      window.location.href = smsHref(smsTo, smsMsg);
+      setSmsOpen(false);
+      return;
+    }
+
+    // Desktop. Rather than follow an sms: link into nothing, hand over the two
+    // things needed to send it from a phone: the words and the invoice.
+    await handOffToPhone('');
   }
 
   if (invoice === undefined) {
@@ -266,11 +431,15 @@ export default function InvoiceDetailPage() {
               />
               <Row
                 onClick={async () => {
-                  if (business) (await import('@/lib/pdf')).shareInvoicePDF(invoice, business);
+                  // The same file the email attaches, so what you hand over by
+                  // AirDrop or WhatsApp is byte-for-byte what a customer is sent.
+                  const { sharePdfFile } = await import('@/lib/pdf');
+                  await sharePdfFile(await requirePdf(), `Invoice ${invoice.invoiceNumber}`);
                 }}
                 icon={<Share2 size={17} />}
                 iconColor="var(--color-mute)"
                 title="Share PDF"
+                subtitle={pdf ? undefined : 'Preparing…'}
               />
             </List>
 
@@ -414,9 +583,7 @@ export default function InvoiceDetailPage() {
             <Check className="mx-auto text-pos" size={44} strokeWidth={2.5} />
             <p className="mt-3 text-[19px] font-semibold text-label">Sent to {emailTo}</p>
             <p className="mt-1 text-[15px] text-label2">
-              {emailKind === 'review'
-                ? 'The review request is on its way.'
-                : 'The customer has the PDF in their inbox.'}
+              {invoice.invoiceNumber || 'The invoice'} went with it as a PDF.
             </p>
             <Button full large className="mt-6" onClick={() => setEmailOpen(false)}>
               Done
@@ -449,10 +616,12 @@ export default function InvoiceDetailPage() {
               </p>
             ) : (
               <p className="rounded-[12px] bg-surface px-4 py-3 text-[15px] leading-snug text-label2">
-                Sends your branded &ldquo;Fully charged. Fully satisfied?&rdquo; thank-you with the
-                Google review button. Nothing is attached.
+                Leads with the Google review ask, with {invoice.invoiceNumber || 'the invoice'}{' '}
+                attached as a PDF underneath.
               </p>
             )}
+
+            <AttachmentStatus pdf={pdf} error={pdfError} />
 
             {emailKind === 'invoice' && (
               <List
@@ -482,7 +651,12 @@ export default function InvoiceDetailPage() {
               <p className="rounded-[12px] bg-neg/10 px-4 py-3 text-[15px] text-neg">{emailState}</p>
             )}
 
-            <Button full large onClick={sendEmail} disabled={emailState === 'sending'}>
+            <Button
+              full
+              large
+              onClick={sendEmail}
+              disabled={emailState === 'sending' || (!pdf && !pdfError)}
+            >
               {emailState === 'sending' ? 'Sending…' : 'Send email'}
             </Button>
           </div>
@@ -509,13 +683,60 @@ export default function InvoiceDetailPage() {
 
           <FieldGroup
             header="Message"
-            footer="Opens Messages with this ready to send — it goes from your own number, so replies come back to you."
+            footer={
+              smsMode === 'share'
+                ? 'Opens the share sheet — pick Messages and the invoice goes with the text, from your own number, so replies come back to you.'
+                : smsMode === 'sms'
+                  ? 'Opens Messages with this ready to send — it goes from your own number, so replies come back to you.'
+                  : 'A laptop can’t send a text. This copies the message and downloads the invoice so you can send both from your phone.'
+            }
           >
             <Textarea rows={6} value={smsMsg} onChange={(e) => setSmsMsg(e.target.value)} />
           </FieldGroup>
 
-          <Button full large onClick={sendSms} disabled={!smsTo.trim()}>
-            <MessageSquare size={18} /> Open Messages
+          <AttachmentStatus
+            pdf={pdf}
+            error={pdfError}
+            note={
+              pdf && smsMode === 'sms'
+                ? 'This phone can’t put a file into a text, so the message goes on its own.'
+                : undefined
+            }
+          />
+
+          {smsDone && (
+            <p className="flex items-start gap-2 rounded-[12px] bg-pos/10 px-4 py-3 text-[15px] leading-snug text-pos">
+              <Check size={17} className="mt-0.5 shrink-0" strokeWidth={2.6} />
+              {smsDone}
+            </p>
+          )}
+
+          <Button
+            full
+            large
+            onClick={sendSms}
+            // A phone number only matters when we're actually opening Messages.
+            disabled={
+              smsBusy || (smsMode !== 'desktop' && !smsTo.trim()) || (!pdf && !pdfError)
+            }
+          >
+            {smsBusy ? (
+              <>
+                <Loader2 size={18} className="animate-spin" /> Working…
+              </>
+            ) : smsMode === 'share' ? (
+              <>
+                <Paperclip size={18} /> Send with invoice
+              </>
+            ) : smsMode === 'sms' ? (
+              <>
+                <MessageSquare size={18} /> Open Messages
+              </>
+            ) : (
+              <>
+                <Copy size={18} /> Copy message &amp; download PDF
+              </>
+            )}
           </Button>
         </div>
       </Sheet>
@@ -535,4 +756,60 @@ export default function InvoiceDetailPage() {
       </Sheet>
     </div>
   );
+}
+
+/**
+ * Says plainly whether the invoice is on the message yet. The old flow gave no
+ * sign either way, so an email could go out with nothing attached and look
+ * exactly like one that worked.
+ */
+function AttachmentStatus({
+  pdf,
+  error,
+  note,
+}: {
+  pdf: File | null;
+  error: string;
+  note?: string;
+}) {
+  if (error) {
+    return (
+      <p className="rounded-[12px] bg-neg/10 px-4 py-3 text-[15px] leading-snug text-neg">
+        {error} Nothing will be sent without it — try reopening the invoice.
+      </p>
+    );
+  }
+  if (!pdf) {
+    return (
+      <p className="flex items-center gap-2 rounded-[12px] bg-surface px-4 py-3 text-[15px] text-label2">
+        <Loader2 size={16} className="animate-spin" /> Preparing the invoice PDF…
+      </p>
+    );
+  }
+  return (
+    <div className="rounded-[12px] bg-surface px-4 py-3">
+      <p className="flex items-center gap-2 text-[15px] text-label2">
+        <Paperclip size={16} style={{ color: 'var(--color-pos)' }} />
+        <span className="min-w-0 flex-1 truncate text-label">{pdf.name}</span>
+        <span className="shrink-0 text-[13px] text-label3">
+          {Math.max(1, Math.round(pdf.size / 1024))} KB
+        </span>
+      </p>
+      {note && <p className="mt-1.5 text-[13px] leading-snug text-label2">{note}</p>}
+    </div>
+  );
+}
+
+// Whether this is a touch device — the difference between a phone that can
+// open Messages and a laptop that cannot.
+const COARSE_POINTER = '(pointer: coarse)';
+
+function subscribeCoarsePointer(onChange: () => void): () => void {
+  const mq = window.matchMedia(COARSE_POINTER);
+  mq.addEventListener('change', onChange);
+  return () => mq.removeEventListener('change', onChange);
+}
+
+function isCoarsePointer(): boolean {
+  return window.matchMedia(COARSE_POINTER).matches;
 }

@@ -121,6 +121,10 @@ export interface Invoice {
   total: number;
   status: InvoiceStatus;
   notes: string;
+  /** Free-typed warranty for this job, e.g. "24 months on the battery, parts
+   *  and labour". Blank = the warranty line is left off the document entirely;
+   *  there is deliberately no default wording. */
+  warranty?: string;
   createdAt: string;
   updatedAt: string;
   convertedInvoiceId?: string; // set on a Quote once it has been converted to an invoice

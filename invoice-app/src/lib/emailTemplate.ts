@@ -54,10 +54,12 @@ export interface InvoiceEmailData {
   invoiceDate?: string;
   /** {{INVOICE_FOOTNOTE}} */
   invoiceFootnote?: string;
-  /** {{PDF_ATTACHMENT}} — true when the PDF rides along. */
+  /** {{PDF_ATTACHMENT}} — true when the PDF rides along. It always does now:
+   *  no email leaves this app without the invoice on it. */
   attached?: boolean;
 
-  /** 'invoice' = review hero + invoice summary; 'review' = review only. */
+  /** Which half leads. Both kinds carry the invoice; 'review' just puts the
+   *  Google ask first and keeps the invoice as a quiet summary underneath. */
   kind: 'invoice' | 'review';
 }
 
@@ -130,7 +132,10 @@ function googleWordmark(size: number): string {
 export function renderInvoiceEmail(d: InvoiceEmailData): string {
   const name = esc(firstName(d.customerName));
   const business = esc(d.businessName);
-  const showInvoice = d.kind === 'invoice';
+  // The invoice summary rides on every email now, review requests included —
+  // the PDF is attached to both, so hiding the summary just made the
+  // attachment look like it had arrived by mistake.
+  const showInvoice = Boolean(d.invoiceNumber);
   const showReview = Boolean(d.reviewUrl);
 
   const headline = esc(

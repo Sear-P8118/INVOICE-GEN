@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { Plus, Search, Users, Trash2 } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { Plus, Search, Users, Trash2, FileText, Pencil } from 'lucide-react';
 import TopBar, { NavButton } from '@/components/ui/TopBar';
 import Sheet from '@/components/ui/Sheet';
 import Button from '@/components/ui/Button';
@@ -15,6 +15,7 @@ const blank = { name: '', email: '', phone: '', address: '' };
 
 export default function CustomersPage() {
   const { businessId } = useParams<{ businessId: string }>();
+  const router = useRouter();
   const [customers, setCustomers] = useState<Customer[] | null>(null);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Customer | 'new' | null>(null);
@@ -35,6 +36,13 @@ export default function CustomersPage() {
         c.phone.includes(q)
     );
   }, [customers, search]);
+
+  // The whole point of a saved contact: their next invoice should already know
+  // who they are. The form opens in trade mode and files the invoice back
+  // against this same record rather than creating a second one.
+  function newInvoiceFor(customer: Customer) {
+    router.push(`/businesses/${businessId}/invoices/new?customer=${customer.id}`);
+  }
 
   function openEditor(target: Customer | 'new') {
     setEditing(target);
@@ -95,7 +103,13 @@ export default function CustomersPage() {
           />
         </div>
 
-        <List>
+        <List
+          footer={
+            filtered && filtered.length > 0
+              ? 'Tap a contact to start an invoice with their details already filled in. The pencil edits the contact itself.'
+              : undefined
+          }
+        >
           {!filtered && <p className="px-4 py-10 text-center text-[15px] text-label3">Loading…</p>}
           {filtered && filtered.length === 0 && (
             <Empty
@@ -109,12 +123,36 @@ export default function CustomersPage() {
             />
           )}
           {filtered?.map((c) => (
-            <Row
-              key={c.id}
-              onClick={() => openEditor(c)}
-              title={c.name}
-              subtitle={[c.phone, c.email].filter(Boolean).join(' · ') || 'No contact details'}
-            />
+            <div key={c.id} className="flex items-center">
+              <button
+                type="button"
+                onClick={() => newInvoiceFor(c)}
+                className="pressable flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
+              >
+                <span
+                  className="flex h-[29px] w-[29px] shrink-0 items-center justify-center rounded-[7px] text-white"
+                  style={{ backgroundColor: 'var(--tint)' }}
+                >
+                  <FileText size={16} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[17px] leading-tight text-label">
+                    {c.name}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[13px] leading-tight text-label2">
+                    {[c.phone, c.email].filter(Boolean).join(' · ') || 'No contact details'}
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => openEditor(c)}
+                aria-label={`Edit ${c.name}`}
+                className="pressable shrink-0 self-stretch px-4 text-label3"
+              >
+                <Pencil size={17} />
+              </button>
+            </div>
           ))}
         </List>
       </div>

@@ -79,7 +79,6 @@ export const BUSINESSES: BusinessConfig[] = [
       terms: [
         'Payment due within 14 days of the invoice date, or by the date agreed.',
         'Goods remain the property of Car Battery Perth until paid in full.',
-        '12-month warranty on all batteries supplied.',
       ],
       footerNote: 'Thank you for your business.',
     },
@@ -120,7 +119,6 @@ export const BUSINESSES: BusinessConfig[] = [
       terms: [
         'Payment due within 14 days of the invoice date, or by the date agreed.',
         'Goods remain the property of Battery Factory Direct until paid in full.',
-        'Warranty applies as stated on this invoice.',
       ],
       footerNote: 'Thank you for choosing Battery Factory Direct.',
     },

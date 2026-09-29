@@ -32,6 +32,9 @@ interface Props {
   mode?: InvoiceMode; // 'fast' (default) = don't save the customer; 'trade' = do
   existing?: Invoice; // edit mode when set
   duplicateFrom?: Invoice; // prefill for duplicates
+  /** Started from a contact on the Customers page: their details are filled in
+   *  and the invoice is filed back against that same record. */
+  prefillCustomer?: Customer;
 }
 
 // The four document types you can create.
@@ -65,7 +68,13 @@ function initialType(source?: Invoice): InvoiceStatus {
   return 'Paid';
 }
 
-export default function InvoiceForm({ businessId, mode: modeProp, existing, duplicateFrom }: Props) {
+export default function InvoiceForm({
+  businessId,
+  mode: modeProp,
+  existing,
+  duplicateFrom,
+  prefillCustomer,
+}: Props) {
   const router = useRouter();
   const source = existing || duplicateFrom;
   const config = getBusinessConfig(businessId)!;
@@ -78,10 +87,10 @@ export default function InvoiceForm({ businessId, mode: modeProp, existing, dupl
   // Customer details are typed straight onto the invoice. Only trade invoices
   // then get filed into the customer list.
   const [cust, setCust] = useState({
-    name: source?.customerName || '',
-    phone: source?.customerPhone || '',
-    email: source?.customerEmail || '',
-    address: source?.customerAddress || '',
+    name: prefillCustomer?.name || source?.customerName || '',
+    phone: prefillCustomer?.phone || source?.customerPhone || '',
+    email: prefillCustomer?.email || source?.customerEmail || '',
+    address: prefillCustomer?.address || source?.customerAddress || '',
   });
   const [type, setType] = useState<InvoiceStatus>(initialType(source));
   const [issueDate, setIssueDate] = useState(existing?.issueDate || today());
@@ -90,6 +99,9 @@ export default function InvoiceForm({ businessId, mode: modeProp, existing, dupl
     source ? source.lineItems.map((i) => ({ ...i, id: crypto.randomUUID() })) : [emptyItem()]
   );
   const [notes, setNotes] = useState(source?.notes || '');
+  // Typed per job. There is no default wording: left blank, the warranty line
+  // is simply left off the document.
+  const [warranty, setWarranty] = useState(source?.warranty || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -168,7 +180,7 @@ export default function InvoiceForm({ businessId, mode: modeProp, existing, dupl
 
     // Trade invoices file the customer away for next time. Fast invoices never
     // touch the customer list.
-    let customerId = existing?.customerId || '';
+    let customerId = existing?.customerId || prefillCustomer?.id || '';
     if (isTrade) {
       try {
         customerId = await saveCustomer({
@@ -210,6 +222,7 @@ export default function InvoiceForm({ businessId, mode: modeProp, existing, dupl
       ...totalsNow,
       status: type,
       notes,
+      warranty: warranty.trim(),
       mode,
     };
 
@@ -237,7 +250,7 @@ export default function InvoiceForm({ businessId, mode: modeProp, existing, dupl
         id: existing?.id,
         invoiceNumber: existing?.invoiceNumber || '',
         businessId,
-        customerId: existing?.customerId || '',
+        customerId: existing?.customerId || prefillCustomer?.id || '',
         customerName: cust.name.trim() || 'Unfinished invoice',
         customerEmail: cust.email.trim(),
         customerPhone: cust.phone.trim(),
@@ -249,6 +262,7 @@ export default function InvoiceForm({ businessId, mode: modeProp, existing, dupl
         ...totalsNow,
         status: 'Draft',
         notes,
+        warranty: warranty.trim(),
         mode,
       });
       router.replace(`/businesses/${businessId}/invoices?status=Draft`);
@@ -495,10 +509,22 @@ export default function InvoiceForm({ businessId, mode: modeProp, existing, dupl
         </div>
       </section>
 
+      <FieldGroup
+        header="Warranty"
+        footer="Typed per job and printed on the invoice. Leave it blank and the warranty line is left off altogether."
+      >
+        <Textarea
+          rows={2}
+          placeholder="e.g. 24 months on the battery, 12 months on parts and labour"
+          value={warranty}
+          onChange={(e) => setWarranty(e.target.value)}
+        />
+      </FieldGroup>
+
       <FieldGroup header="Notes" footer="Shown on the invoice.">
         <Textarea
           rows={2}
-          placeholder="e.g. 12 month warranty on all batteries"
+          placeholder="e.g. fitted on site, old battery taken away"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />

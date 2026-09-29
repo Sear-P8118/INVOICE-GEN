@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   CheckCircle2,
 } from 'lucide-react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Business, Invoice, LineItem, daysOverdue } from '@/types';
 import { getBusinessConfig, formatCurrency } from '@/lib/constants';
 
@@ -138,18 +139,79 @@ function ContinuedLine({ invoice }: { invoice: Invoice }) {
   );
 }
 
-export default function InvoiceDocument({ invoice, business }: Props) {
+// Breathing room kept between the last line of content and the page footer.
+const FOOTER_CLEARANCE = 12;
+
+// True when a rendered page's content runs into (or under) its footer. Each
+// template's page is: decorative absolute circles, the in-flow content, and
+// the absolutely positioned footer as its last child.
+function overflowsFooter(pageEl: HTMLElement): boolean {
+  const footer = pageEl.lastElementChild as HTMLElement | null;
+  if (!footer) return false;
+  const pageRect = pageEl.getBoundingClientRect();
+  // Rects are in screen space; the preview is CSS-scaled, so convert to doc px.
+  const scale = pageRect.height / DOC_H || 1;
+  let contentBottom = 0;
+  for (const child of Array.from(pageEl.children) as HTMLElement[]) {
+    if (child === footer || getComputedStyle(child).position === 'absolute') continue;
+    contentBottom = Math.max(contentBottom, child.getBoundingClientRect().bottom);
+  }
+  const footerTop = footer.getBoundingClientRect().top;
+  return (footerTop - contentBottom) / scale < FOOTER_CLEARANCE;
+}
+
+export default function InvoiceDocument({
+  invoice,
+  business,
+  onPageCount,
+}: Props & { onPageCount?: (n: number) => void }) {
   const cfg = getBusinessConfig(invoice.businessId);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // The height estimates in paginateItems are deliberately cautious, so they
+  // split invoices that would comfortably fit on one page. Instead, first lay
+  // everything out on a single page and measure it; only when it genuinely
+  // runs into the footer do we fall back to the estimated split.
+  const [layout, setLayout] = useState<{ key: object; onePage: boolean } | null>(null);
+  const [fontsReady, setFontsReady] = useState(false);
+  const measured = layout && layout.key === invoice ? layout : null;
+
+  useLayoutEffect(() => {
+    if (measured) return;
+    const pageEl = rootRef.current?.querySelector('[data-invoice-page]')?.firstElementChild as HTMLElement | null;
+    if (!pageEl) return;
+    setLayout({ key: invoice, onePage: !overflowsFooter(pageEl) });
+  }, [invoice, measured, fontsReady]);
+
+  // Web fonts can land after the first measurement and change line wrapping,
+  // so measure again once they're in.
+  useLayoutEffect(() => {
+    if (fontsReady || typeof document === 'undefined' || !document.fonts) return;
+    let live = true;
+    document.fonts.ready.then(() => {
+      if (!live) return;
+      setLayout(null);
+      setFontsReady(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [fontsReady]);
+
+  const pages = !measured || measured.onePage ? [invoice.lineItems] : paginateItems(invoice);
+
+  useLayoutEffect(() => {
+    if (measured) onPageCount?.(pages.length);
+  }, [measured, pages.length, onPageCount]);
+
   if (!cfg) return null;
   const Template = cfg.pdf.template === 'bfd' ? BFD : cfg.pdf.template === 'fremantle' ? Fremantle : CBP;
-  const pages = paginateItems(invoice);
   // Index of each page's first item within invoice.lineItems.
   const starts = pages.reduce<number[]>((acc, items, i) => {
     acc.push(i === 0 ? 0 : acc[i - 1] + pages[i - 1].length);
     return acc;
   }, []);
   return (
-    <div>
+    <div ref={rootRef}>
       {pages.map((items, i) => (
         <div key={i} data-invoice-page style={{ marginTop: i ? PAGE_GAP : 0 }}>
           <Template
@@ -383,6 +445,9 @@ function CBP({ invoice, business, items, isFirst, isLast, pageNo, pageCount, sta
           <NotesTerms title="NOTES" accent={orange} body={[invoice.notes || cfg.pdf.footerNote]} />
           <NotesTerms title="TERMS" accent={orange} body={cfg.pdf.terms} />
         </div>
+        <div style={{ fontSize: 12.5, color: '#475569' }}>
+          <WarrantyLine warranty={invoice.warranty} accent={orange} />
+        </div>
         </>
         )}
       </div>
@@ -523,10 +588,7 @@ function BFD({ invoice, business, items, isFirst, isLast, pageNo, pageCount }: P
             <div>
               <b style={{ color: '#0f172a' }}>Payment Method:</b> {business.bsb || business.accountNumber ? 'Card / EFT' : 'Card'}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-              <ShieldCheck size={14} color={red} />
-              <b style={{ color: '#0f172a' }}>Warranty:</b> as stated on this invoice
-            </div>
+            <WarrantyLine warranty={invoice.warranty} accent={red} />
             {(business.bsb || business.accountNumber) && (
               <div style={{ marginTop: 10, lineHeight: 1.5 }}>
                 {business.accountName && <div style={{ fontWeight: 800, color: '#0f172a' }}>{business.accountName}</div>}
@@ -683,8 +745,9 @@ function Fremantle({ invoice, business, items, isFirst, isLast, pageNo, pageCoun
         {/* EFT + totals */}
         {isLast && (
         <div style={{ display: 'flex', gap: 18, marginTop: 22, alignItems: 'flex-start' }}>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, fontSize: 12.5, color: '#475569' }}>
             <PaymentBox business={business} invoice={invoice} accent={red} title="EFT PAYMENT DETAILS" />
+            <WarrantyLine warranty={invoice.warranty} accent={red} />
           </div>
           <div style={{ width: 290 }}>
             <TotalsRows invoice={invoice} gstReg={gstReg} />
@@ -747,6 +810,23 @@ function PaymentBox({ business, invoice, accent, title }: { business: Business; 
         {business.bsb && <div>BSB: {business.bsb}</div>}
         {business.accountNumber && <div>Account: {business.accountNumber}</div>}
         <div style={{ fontWeight: 700 }}>Reference: {invoice.invoiceNumber}</div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The warranty, exactly as it was typed on the invoice. There is no default
+ * wording: an invoice with no warranty entered simply doesn't carry the line.
+ */
+function WarrantyLine({ warranty, accent }: { warranty?: string; accent: string }) {
+  const text = (warranty || '').trim();
+  if (!text) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 8 }}>
+      <ShieldCheck size={14} color={accent} style={{ flexShrink: 0, marginTop: 1 }} />
+      <div>
+        <b style={{ color: '#0f172a' }}>Warranty:</b> {text}
       </div>
     </div>
   );

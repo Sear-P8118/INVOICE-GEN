@@ -36,7 +36,8 @@ export async function GET(request: Request) {
     status: 'Paid in full',
     paid: true,
     invoiceDate: '20 August 2026',
-    attached: kind === 'invoice',
+    // Every email carries the PDF now, review requests included.
+    attached: true,
     kind,
   });
 
