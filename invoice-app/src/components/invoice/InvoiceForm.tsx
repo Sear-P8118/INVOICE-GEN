@@ -25,6 +25,7 @@ import { describeSaveError } from '@/lib/errors';
 import { Input, Textarea, FieldGroup } from '@/components/ui/Field';
 import { statusColor } from '@/components/ui/StatusBadge';
 import Button from '@/components/ui/Button';
+import StatusPicker, { STATUS_CHOICES } from './StatusPicker';
 import { addDays, format } from 'date-fns';
 
 interface Props {
@@ -36,14 +37,6 @@ interface Props {
    *  and the invoice is filed back against that same record. */
   prefillCustomer?: Customer;
 }
-
-// The four document types you can create.
-const TYPES: { value: InvoiceStatus; label: string }[] = [
-  { value: 'Paid', label: 'Paid' },
-  { value: 'Pending', label: 'Unpaid' },
-  { value: 'Overdue', label: 'Overdue' },
-  { value: 'Quote', label: 'Quote' },
-];
 
 const TYPE_HINT: Record<string, string> = {
   Paid: 'Already paid — records the date it was paid.',
@@ -64,8 +57,8 @@ const emptyItem = (description = ''): LineItem => ({
 function initialType(source?: Invoice): InvoiceStatus {
   const s = source?.status;
   if (s === 'Paid' || s === 'Overdue' || s === 'Pending' || s === 'Quote') return s;
-  // Most jobs are paid on the spot, so that's what a new invoice starts as.
-  return 'Paid';
+  // Nothing goes out marked Paid unless someone says so.
+  return 'Pending';
 }
 
 export default function InvoiceForm({
@@ -93,6 +86,8 @@ export default function InvoiceForm({
     address: prefillCustomer?.address || source?.customerAddress || '',
   });
   const [type, setType] = useState<InvoiceStatus>(initialType(source));
+  // A new invoice (or a parked one being finished) asks what it is first.
+  const [picking, setPicking] = useState(!existing || existing.status === 'Draft');
   const [issueDate, setIssueDate] = useState(existing?.issueDate || today());
   const [dueDate, setDueDate] = useState(existing?.dueDate || '');
   const [lineItems, setLineItems] = useState<LineItem[]>(
@@ -316,8 +311,18 @@ export default function InvoiceForm({
   return (
     <div className="space-y-6 px-4 py-4 lg:px-6">
       {/* Type — a plain choice list, one tap, no colour soup */}
+      {picking && (
+        <StatusPicker
+          value={type}
+          onPick={(s) => {
+            chooseType(s);
+            setPicking(false);
+          }}
+        />
+      )}
+
       <FieldGroup header="Type" footer={TYPE_HINT[type]}>
-        {TYPES.map((t) => (
+        {STATUS_CHOICES.map((t) => (
           <button
             key={t.value}
             type="button"

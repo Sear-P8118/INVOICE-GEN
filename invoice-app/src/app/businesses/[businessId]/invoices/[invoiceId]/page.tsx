@@ -16,6 +16,7 @@ import {
   Check,
   Paperclip,
   Loader2,
+  CheckCircle2,
 } from 'lucide-react';
 import TopBar, { NavButton } from '@/components/ui/TopBar';
 import Button from '@/components/ui/Button';
@@ -30,6 +31,7 @@ import {
   updateInvoiceStatus,
   deleteInvoice,
   convertQuoteToInvoice,
+  markInvoiceEmailed,
 } from '@/lib/firestore';
 import { formatCurrency } from '@/lib/constants';
 import {
@@ -41,6 +43,12 @@ import {
 } from '@/lib/messages';
 import { auth } from '@/lib/firebase';
 import { Business, Invoice, InvoiceStatus, INVOICE_STATUSES } from '@/types';
+import { format, isToday, parseISO } from 'date-fns';
+
+function sentWhen(iso: string): string {
+  const d = parseISO(iso);
+  return isToday(d) ? `today at ${format(d, 'h:mm a')}` : format(d, "d MMM yyyy 'at' h:mm a");
+}
 
 export default function InvoiceDetailPage() {
   const { businessId, invoiceId } = useParams<{ businessId: string; invoiceId: string }>();
@@ -257,6 +265,12 @@ export default function InvoiceDetailPage() {
         return;
       }
       setEmailState('sent');
+      // Only the invoice email marks it sent — a review request isn't the invoice going out.
+      if (emailKind === 'invoice') {
+        const to = emailTo.trim();
+        setInvoice({ ...invoice, emailedAt: new Date().toISOString(), emailedTo: to });
+        markInvoiceEmailed(invoice.id, to).catch(() => {});
+      }
     } catch {
       setEmailState('Could not send. Check your connection and try again.');
     }
@@ -395,7 +409,25 @@ export default function InvoiceDetailPage() {
 
       <div className="px-4 py-4 lg:px-6">
         {/* Headline: who, how much, what state */}
-        <div className="rounded-[14px] bg-surface px-4 py-4">
+        {invoice.emailedAt && (
+          <div
+            key={invoice.emailedAt}
+            className="sent-banner mb-3 flex items-center gap-3 rounded-[14px] bg-pos px-4 py-3.5 text-white shadow-[0_6px_20px_rgba(52,199,89,0.35)]"
+          >
+            <CheckCircle2 size={28} strokeWidth={2.4} className="shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[17px] font-bold leading-tight">Invoice emailed</p>
+              <p className="truncate text-[14px] text-white/90">
+                To {invoice.emailedTo} · {sentWhen(invoice.emailedAt)}
+              </p>
+            </div>
+          </div>
+        )}
+        <div
+          className={`rounded-[14px] px-4 py-4 transition-colors duration-500 ${
+            invoice.emailedAt ? 'bg-pos/10 ring-2 ring-pos' : 'bg-surface'
+          }`}
+        >
           <p className="text-[15px] text-label2">{invoice.customerName}</p>
           <p className="numeric mt-0.5 text-[34px] font-bold leading-none text-label">
             {formatCurrency(invoice.total)}
@@ -417,9 +449,9 @@ export default function InvoiceDetailPage() {
             <List header="Send to customer">
               <Row
                 onClick={() => openEmail('invoice')}
-                icon={<Mail size={17} />}
-                iconColor="var(--color-info)"
-                title="Email invoice"
+                icon={invoice.emailedAt ? <Check size={17} strokeWidth={3} /> : <Mail size={17} />}
+                iconColor={invoice.emailedAt ? 'var(--color-pos)' : 'var(--color-info)'}
+                title={invoice.emailedAt ? 'Emailed ✓ — send again' : 'Email invoice'}
                 subtitle={invoice.customerEmail || 'No email on this invoice'}
               />
               <Row
@@ -579,15 +611,21 @@ export default function InvoiceDetailPage() {
         title={emailKind === 'review' ? 'Review request' : 'Email invoice'}
       >
         {emailState === 'sent' ? (
-          <div className="py-8 text-center">
-            <Check className="mx-auto text-pos" size={44} strokeWidth={2.5} />
-            <p className="mt-3 text-[19px] font-semibold text-label">Sent to {emailTo}</p>
-            <p className="mt-1 text-[15px] text-label2">
+          <div className="sent-panel -mx-4 -mb-6 bg-pos px-6 pb-8 pt-10 text-center text-white">
+            <span className="sent-check mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/20">
+              <Check size={46} strokeWidth={3} />
+            </span>
+            <p className="mt-4 text-[24px] font-bold tracking-[-0.02em]">Email sent</p>
+            <p className="mt-1 text-[15px] text-white/90">To {emailTo}</p>
+            <p className="mt-0.5 text-[14px] text-white/80">
               {invoice.invoiceNumber || 'The invoice'} went with it as a PDF.
             </p>
-            <Button full large className="mt-6" onClick={() => setEmailOpen(false)}>
+            <button
+              onClick={() => setEmailOpen(false)}
+              className="mt-7 min-h-[50px] w-full rounded-[12px] bg-white text-[17px] font-semibold text-pos active:opacity-80"
+            >
               Done
-            </Button>
+            </button>
           </div>
         ) : (
           <div className="space-y-4 pt-1">

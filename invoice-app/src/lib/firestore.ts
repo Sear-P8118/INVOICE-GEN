@@ -247,6 +247,15 @@ export async function updateInvoiceStatus(id: string, status: Invoice['status'])
   );
 }
 
+// Records a successful email. Leaves updatedAt alone: nothing on the document
+// itself changed, so the cached PDF stays valid.
+export async function markInvoiceEmailed(id: string, to: string): Promise<void> {
+  await settled(
+    updateDoc(doc(db(), 'invoices', id), { emailedAt: new Date().toISOString(), emailedTo: to }),
+    undefined
+  );
+}
+
 // Creates a new Pending invoice from a quote, keeping the quote intact, and
 // records the link back on the quote so we can warn about re-converting.
 export async function convertQuoteToInvoice(quote: Invoice): Promise<string> {

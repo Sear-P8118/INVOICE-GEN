@@ -129,4 +129,7 @@ export interface Invoice {
   updatedAt: string;
   convertedInvoiceId?: string; // set on a Quote once it has been converted to an invoice
   mode?: InvoiceMode; // how it was created — see InvoiceMode
+  /** Set once the invoice email actually goes out — the page turns green. */
+  emailedAt?: string;
+  emailedTo?: string;
 }

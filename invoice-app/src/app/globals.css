@@ -135,6 +135,40 @@ input[type="date"]::-webkit-date-and-time-value {
 .sheet-scrim {
   animation: fade-in 0.28s ease-out both;
 }
+/* Leaving: slide back down and fade the scrim. */
+@keyframes sheet-down-kf {
+  from { transform: none; }
+  to { transform: translateY(100%); }
+}
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes choice-in-kf {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.sheet-down {
+  animation: sheet-down-kf 0.26s cubic-bezier(0.4, 0, 1, 1) 0.12s both;
+}
+.scrim-out {
+  animation: fade-out 0.26s ease-in 0.12s both;
+}
+/* Email sent: the green panel and banner pop in, the tick springs. */
+@keyframes sent-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.sent-panel { animation: fade-in 0.3s ease-out both; }
+.sent-check { animation: sent-pop 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both; }
+.sent-banner { animation: choice-in-kf 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.choice-in {
+  animation: choice-in-kf 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (min-width: 640px) {
+  .sheet-down { animation-name: fade-out; }
+}
 
 /* ---------- Birthday celebration ---------- */
 @keyframes bday-pop {
@@ -166,5 +200,5 @@ input[type="date"]::-webkit-date-and-time-value {
   .bday-overlay, .bday-card { animation: none; }
   .bday-glow { animation: none; opacity: 0.6; }
   .bday-confetti-piece { display: none !important; }
-  .sheet-panel, .sheet-scrim { animation: none; }
+  .sheet-panel, .sheet-scrim, .choice-in, .sent-panel, .sent-check, .sent-banner { animation: none; }
 }
